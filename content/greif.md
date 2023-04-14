@@ -1,5 +1,5 @@
 +++
-title = "The Purpose of Greif"
+title = "The Purpose of Grief"
 date = 2020-06-26
 [taxonomies]
 	categories = [ "Life", "Mental Health" ]
