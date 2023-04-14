@@ -1,5 +1,5 @@
 # The URL the site will be built for
-base_url = "https://graysonhead.net"
+base_url = "https://blog.graysonhead.net"
 
 theme = "after-dark"
 # Whether to automatically compile all Sass files in the sass directory
