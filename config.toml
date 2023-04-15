@@ -1,7 +1,8 @@
 # The URL the site will be built for
 base_url = "https://blog.graysonhead.net"
 
-theme = "after-dark"
+
+theme = "archie-zola"
 # Whether to automatically compile all Sass files in the sass directory
 compile_sass = true
 
@@ -11,7 +12,7 @@ build_search_index = true
 generate_feed = true
 
 taxonomies = [
-	{name = "categories", feed = true},
+	#{name = "categories", feed = true},
 	{name = "tags", feed = true},
 ]
 
@@ -22,10 +23,46 @@ highlight_code = true
 
 [extra]
 # Put all your custom variables here
-author = "Grayson Head"
-after_dark_menu = [
-	{url = "$BASE_URL", name = "Home"},
-	{url = "$BASE_URL/categories", name = "Categories"},
-	{url = "$BASE_URL/tags", name = "Tags"},
+subtitle = "Musings about programming, motors, gamedev, and life."
+copyright = "Grayson Head"
+mode = "dark"
+[extra.translations]
+languages = [{name = "en", url = "/"}]
+
+# config multi-language menu and other text
+[[extra.translations.en]]
+show_more = "Read more ⟶"
+previous_page = "← Previous"
+next_page = "Next →"
+posted_on = "on "
+posted_by = "Published by"
+read_time = "minute read"
+all_tags = "All tags"
+menus = [
+	{ name = "/posts", url = "/posts", weight = 1 },
+#	{ name = "/projects", url = "/projects", weight = 2},
+	{ name = "/about", url = "/about", weight = 3},
+	
 ]
-after_dark_title = "Grayson Writes Things"
+
+[[extra.social]]
+icon = "github"
+name = "GitHub"
+url = "https://github.com/graysonhead"
+
+[[extra.social]]
+icon = "globe"
+name = "Mastadon"
+url = "https://hachyderm.io/@Darkside"
+
+[[extra.social]]
+icon = "linkedin"
+name = "LinkedIn"
+url = "https://www.linkedin.com/in/graysonhead/"
+
+[[extra.social]]
+icon = "camera"
+name = "PixelFed"
+url = "https://pixel.tchncs.de/i/web"
+
+

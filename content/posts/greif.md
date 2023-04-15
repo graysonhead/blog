@@ -2,10 +2,9 @@
 title = "The Purpose of Grief"
 date = 2020-06-26
 [taxonomies]
-	categories = [ "Life", "Mental Health" ]
-	tags = [ "Mental Health", "Greif", "Loss" ]
+	tags = [ "Mental Health", "Grief", "Loss" ]
 +++
-<img src="../images/greif.jpg" alt="One of the last pictures I have of him and I together" />
+<img src="../../images/greif.jpg" alt="One of the last pictures I have of him and I together" />
 
 On a school morning, my sister and I sat with our mother eating breakfast, as we did almost every day. We lived in a rather eccentric but somewhat laid back trailer park mixed located effectively in the middle of a somewhat normal suburban neighborhood. We had our fair share of drama, drug dealers, and domestic calls. Sirens weren’t at all uncommon despite a relatively high level of safety. But the sirens this morning were different. One of my career mentors later in life, a former chaplain for the local fire department, would later tell me that nothing motivates emergency services quite like a call from a desperate mother saying the words “my child isn’t breathing.”
 

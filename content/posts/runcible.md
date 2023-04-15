@@ -2,7 +2,6 @@
 title = "Runcible: Declarative Network Automation"
 date = 2019-05-12
 [taxonomies]
-	categories = ["Open Source"]
 	tags = [ "Python", "Open Source", "Config Automation", "Declarative", "Networking" ]
 +++
 

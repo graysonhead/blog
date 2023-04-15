@@ -2,7 +2,6 @@
 title = "Your Managed Service Provider Sucks"
 date = 2019-10-24
 [taxonomies]
-  categories = [ "Tech Industry", "Rants" ]
   tags = [ "MSP", "Managed Service Provider", "Business" ]
 +++
 
