@@ -1,7 +1,7 @@
 +++
 title = "Async TCP in Rust Without Shooting Yourself in the Foot"
 
-date = 2023-04-14
+date = 2023-04-18
 
 [taxonomies]
 	tags = ["Rust", "Networking", "TCP", "Tutorials"]
