@@ -9,9 +9,11 @@
 
 html {
     color: #232333;
+    /* font-family: "Open Sans", sans-serif; */
     font-family: "Roboto";
-    font-size: 15px;
-    line-height: 1.6em;
+    font-size: medium;
+    line-height: 1.5;
+    font-weight: 300;
 }
 
 body {
@@ -254,6 +256,8 @@ span {
 /* Posts */
 article .title {
     margin-bottom: 1em;
+    font-family: "Roboto Monospaced", monospace;
+    font-size: large;
 }
 
 /* Callout */
