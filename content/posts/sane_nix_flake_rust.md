@@ -7,8 +7,7 @@ date = 2023-04-24
 	tags = ["Tutorials", "Nix", "NixOS", "Rust", "rust-overlay", "naersk" ]
 +++
 
-Nix is a lot of things, a language, a package manager, even an operating system, but really its an ecosystem. 
-And that ecosystem can do some really neat things.
+Nix is not just a language, package manager, or operating system, but an ecosystem with remarkable capabilities. 
 
 This tutorial is targeted for someone who is getting their feet wet with Nix, using the Nix
 package manager on Linux or MacOS. But, it also demonstrates a development workflow
