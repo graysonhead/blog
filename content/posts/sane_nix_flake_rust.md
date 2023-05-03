@@ -99,7 +99,7 @@ modify the output set and add a seperate output for building a container image:
 
 ```nix
 {
-		packages =
+    packages =
           {
             app = naersk'.buildPackage {
               # Naersk will look for a `Cargo.toml` in this directory
