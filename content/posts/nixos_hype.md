@@ -19,7 +19,7 @@ In truth, it won't affect the conclusions of this post because what I want to ev
 
 # The Promise of Panacea
 
-Looking back to when I learned ansible, I remember being filled with its promise. I was still working for a company that largely managed servers like cattle (because everyone did in those days except for the rare hyper-scale exceptions.) I remember thinking that Ansible was going to revolutionize the way I provisoined machines, and in all honesty it did. It solved a lot of problems, but more importantly, it changed my mindset on how large herds of computers should be managed.
+Looking back to when I learned ansible, I remember being filled with its promise. I was still working for a company that largely managed servers like pets (because everyone did in those days except for the rare hyper-scale exceptions.) I remember thinking that Ansible was going to revolutionize the way I provisoined machines, and in all honesty it did. It solved a lot of problems, but more importantly, it changed my mindset on how large herds of computers should be managed.
 
 Ansible had a lot of shortcomings though, for instance, while it tried very hard to be declarative it was still very much operating on an imperative CLI or against imperative APIs. While most of the core plugins were idempotent (you can run them multiple times and it won't mess things up if the system is already in the correct state), there was no functional way of forcing plugin developers to write idempotent plugins. As a result, as you left the officially blessed core plugins, you entered a wild west where side effects and unexpected behavior were more and more likely. 
 

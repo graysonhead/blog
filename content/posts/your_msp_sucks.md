@@ -62,7 +62,7 @@ Eventually you are going to reach a point where your employees out-learn the pos
 
 If you are successful, hire the right people, and automate your workflows to a militant degree, you will eventually find a niche.
 
-One of the companies I worked for found a niche in Business Continuity services. Our mistake was not pivoting to doing BCS exclusively while we had the opportunity to do so. If you look at a lot of software companies in the MSP space, they found a niche and then started selling thier software or services to other MSPs. This is the dream. Even if you stay in the service industry, its way easier to sell yourself as a specialized provider (or better yet, software provider that offers services) than generic catch all tech support. And there is the possibility you will actually make money. So when you see your opportunity to jump ship and fill a niche; Do it.
+One of the companies I worked for found a niche in Business Continuity services. Our mistake was not pivoting to doing BCS exclusively while we had the opportunity to do so. If you look at a lot of software companies in the MSP space, they found a niche and then started selling their software or services to other MSPs. This is the dream. Even if you stay in the service industry, its way easier to sell yourself as a specialized provider (or better yet, software provider that offers services) than generic catch all tech support. And there is the possibility you will actually make money. So when you see your opportunity to jump ship and fill a niche; Do it.
 
 All MSP markets outside of dedicated government contractors are a race to the bottom. You might not cut costs, but your competition will. And they are probably better at it than you.
 
