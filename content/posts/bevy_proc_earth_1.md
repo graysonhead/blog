@@ -29,7 +29,6 @@ pub fn generate_face(
     resolution: u32,
     x_offset: f32,
     y_offset: f32,
-    rs: &RasterData,
 ) -> Mesh {
     let axis_a = Vec3::new(normal.y, normal.z, normal.x); // Horizontal
     let axis_b = axis_a.cross(normal); // Vertical
