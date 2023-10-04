@@ -244,7 +244,7 @@ So a valid set of triangles for our example could be:
 
 But how do we specify that in Bevy? Now we need to return to the Index we glossed over earlier.
 
-Remember I said before we needed two things: A list of Verticies and an index that defines triangles. Well now that we know they must be counter-clockwise, we are armed with all the information we need to go about making them.
+Remember I said before we needed two things: A list of Verticies and an index that defines triangles? Well now that we know they must be counter-clockwise, we are armed with all the information we need to go about making them.
 
 So, our list of verticies could be:
 
@@ -282,7 +282,7 @@ if x != resolution - 1 && y != resolution - 1 {
 }
 ```
 
-Now, lets apply this to our 2d box example (which has a resolution of 1):
+Now, lets apply this to our 2d box example (which has a resolution of 2):
 
 Starting at index 0, our first triangle indexes are:
 
