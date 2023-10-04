@@ -185,7 +185,7 @@ if x != resolution - 1 && y != resolution - 1 {
 
 Now we need to unwrap this. In doing so, we will learn a fundemental truth of video-cards:
 
-# Everything is a triangle
+# Everything Is a Triangle
 
 So we have a list of verticies already, and its probably rather intuitive that these verticies will make up the points of our mesh. But how do we draw the lines between each adjacent vertex in our plane? Heck, which vertexes do we draw lines between in the first place?
 
