@@ -377,7 +377,7 @@ So now that all of that is out of the way, lets make it look like an actual eart
 
 ## Textures
 
-Head over to [Visible Earth](https://visibleearth.nasa.gov/collection/1484/blue-marble?page=2) and download the texture package for the month of your choice. Use the highest resolution one if possible for maximum pretty. But if you get a WGPU error when compiling use: try a lower resolution (you may also have to resample them in GIMP or another program if you are running on a computer without a discrete GPU.)
+Head over to [Visible Earth](https://visibleearth.nasa.gov/collection/1484/blue-marble?page=2) and download the texture package for the month of your choice. Use the highest resolution one if possible for maximum pretty. But if you get a WGPU error when compiling, try a lower resolution (you may also have to resample them in GIMP or another program if you are running on a computer without a discrete GPU.)
 
 It should look something like this:
 
