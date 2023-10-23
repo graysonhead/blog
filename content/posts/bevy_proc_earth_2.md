@@ -301,7 +301,7 @@ You are probably wondering what is up with this bit specifically:
 
 This is a section that is needed to prevent seams where the UV coordinates go in the wrong direction. Since the coordinates near the prime meridian go from 
 1 to 0 in the space of one vertex, the entire texture is re-projected backwards on the faces leading up to the prime meridian. There are a few ways to fix this, namely offsetting
-your vertexes so that they are *exactly* aligned with the prime meridian, but I decided to just clamp the values close to both the equator and the poles to prevent the seams from occurring.
+your vertexes so that they are *exactly* aligned with the prime meridian, but I decided to just clamp the values close to both the prime meridian and the poles to prevent the seams from occurring.
 
 And, just to test that everything is working properly, lets go ahead and assign it an [uv test texture](https://www.google.com/search?client=firefox-b-1-d&q=uv+test+texture) of your choice.
 
