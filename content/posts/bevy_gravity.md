@@ -1,7 +1,7 @@
 +++
 title = "Bevy Systems: Gravity"
 date = 2025-11-14
-draft = true
+draft = false
 [taxonomies]
 	tags = [ "Rust", "Bevy", "Gamedev", "Gravity" ]
 +++
