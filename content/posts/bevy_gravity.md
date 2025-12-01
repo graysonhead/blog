@@ -924,6 +924,8 @@ Other practical considerations are that even with being able to set the "scale" 
 
 So having a bunch of fixed planets in fixed orbits, but subjecting the actual player entity (or entities) to n-body physics is much more reasonable. It's transparent from a gameplay perspective, and much better optimized from a resource perspective.
 
+Check out the repo and examples [here](https://github.com/graysonhead/bevy-gravity) if you'd like to give it a spin.
+
 
 [^1]: [Python implementation of Euler integration](https://gist.github.com/graysonhead/224810ebb92fe532444b56a45899d4eb)
 
