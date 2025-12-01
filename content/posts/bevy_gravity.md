@@ -1,7 +1,7 @@
 +++
 title = "Bevy Systems: Gravity"
 date = 2025-11-14
-draft = true
+draft = false
 [taxonomies]
 	tags = [ "Rust", "Bevy", "Gamedev", "Gravity" ]
 +++
@@ -910,41 +910,12 @@ fn spawn_scene(
 
 ## Interactive Demo
 
-Now for the fun part: here's a WASM build with interactive controls. You can adjust time acceleration, toggle integrators, and see the energy conservation in real-time:
+Check out an interactive demo [here](../../projects/bevy-gravity/)
 
-<div class="info">
-<p style="margin-top: 15px; font-size: 14px; color: #aaa;">
-Press F1 in-game to view controls
-</p>
-</div>
-
-<div id="loading" class="loading">
-<h2>Loading gravity simulation...</h2>
-<p>Please wait while the WASM module loads.</p>
-</div>
-
-<canvas id="bevy"></canvas>
-
-<script type="module">
-import init, { run_two_bodies } from '../../wasm/gravity/gravity_wasm.js';
-
-async function run() {
-    try {
-        await init();
-        run_two_bodies();
-        document.getElementById('loading').style.display = 'none';
-    } catch (e) {
-        console.error('Failed to load WASM:', e);
-        document.getElementById('loading').innerHTML = '<h2>Error loading simulation</h2><p>Please check the console for details.</p>';
-    }
-}
-
-run();
-</script>
-
-So, is all this practical for a real game? To be honest, probably not.
 
 # Future Plans, and Actual Usage
+
+So, is all this practical for a real game? To be honest, probably not.
 
 It's probably not practical to have *every single entity* participate in the n-body simulations. For one, having to predict the path of a bunch of other objects that are all subject to n-body physics themselves requires subjecting yourself to a lot of brute-force calculations (which is what the current path prediction does). The next time I pick this up, I'll probably create a `PinnedOrbit` component, where a given entity can find a stable orbit around a `Pinned` entity, calculate a realistic orbit, and then just follow that path on rails for the rest of eternity. This would make sense for a game involving space craft with realistic orbital physics. In a stable orbital system, the orbits of the planets are not meaningfully going to change, and the mass of all the spacecraft zipping around aren't going to meaningfully affect the trajectory of the planets due to the astronomical mass disparity. Calculating all that out would just be a waste of CPU cycles. 
 

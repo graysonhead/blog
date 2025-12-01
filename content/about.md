@@ -12,6 +12,8 @@ I'm Grayson. Here is some of the stuff I'm interested in:
 * Offroad exploration
 * Car and boat restoration
 
+I'm also love aviation, and I'm currently working on getting my private license, so there will probably be some posts about that as well.
+
 ## Contact
 
 [Github](https://github.com/graysonhead)  
