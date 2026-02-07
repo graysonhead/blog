@@ -14,7 +14,7 @@ draft = false
 
 In the case of engine failure, how screwed are you?
 
-As of the time of writing, most of my flight experience has been over a particularly flat part of central Texas. Even better, there are a bunch of nice farmers around to maintain these emergency runways (though, annoyingly, they do tend to plant crops on them). Doing simulated engine failures and fires over our practice area is pretty hard to mess up. Just point the aircraft in a random direction, and chances are there will be a large flat field there.
+As of the time of writing, most of my flight experience has been over a particularly flat part of central Texas. Even better, there are a bunch of nice farmers around to maintain emergency runways (though, annoyingly, they do tend to plant crops on them). Doing simulated engine failures and fires over our practice area is pretty hard to mess up. Just point the aircraft in a random direction, and chances are there will be a large flat field there.
 
 <img src="../../images/plenty_of_fields.jpg" alt="Picture taken from a piper archer in an area north of Georgetown showing a ton of fields" />
 
