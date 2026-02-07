@@ -1,5 +1,5 @@
 +++
-title = "Mapping Tomorrow's Crash Sites Today: A GIS Approach"
+title = "Mapping Tomorrow's Crash Sites Today"
 
 date = 2026-02-04
 
@@ -32,7 +32,7 @@ You might be surprised to learn that the three occupants of this plane survived,
 
 Forced landings in inhospitable environments (rough terrain, trees, etc.) are quite survivable *when executed properly*. Some sources would put the rate of survival somewhere in the 90-97% range [^1], which is similar to the survival rate of ditching in water. But ditching in treetops or other inhospitable environments does carry a significant chance of injury. To make things simple, you can assume the chances of a moderate to serious injury when landing in a dense wooded area are probably about 50/50.
 
-Single engine aircraft stall at low speeds (formerly a requirement of their certification, but this was eliminated around 2017). This, combined with structural requirements[^6] related to withstanding abrupt deceleration, means that you can land into/onto quite a lot of things with a reasonable chance of survival. Just don't stall and spin. Get as slow as you can without stalling, and in the words of Bob Hoover, fly the plane as far into the crash as you can. Do this, and your odds of survival are pretty good.
+Single-engine aircraft stall at low speeds by design, which means lower impact energy when you hit the ground. Certification standards used to mandate low stall speeds for this reason, though these requirements were revised around 2017. This characteristic, combined with structural requirements[^6] for withstanding abrupt deceleration, means you can land into or onto quite a lot of things with a reasonable chance of survival. Just don't stall and spin. If you lose control and enter a spin, you're likely hitting the ground at 100 knots or more instead of a controlled 50 knots. Get as slow as you can without stalling, and in the words of Bob Hoover, fly the plane as far into the crash as you can. Do this, and your odds of survival are pretty good.
 
 But it is probably going to hurt.
 
@@ -73,7 +73,7 @@ The NLCD classifies land cover into a number of classes:
 
 This gets us a long way towards our goal, as we can eliminate a lot of options that typically don't make good landing sites (Developed land, Forests, Wetlands). And also, to an extent, prioritize the better options. i.e., Cultivated Crops -> Pasture/Grassland -> Barren. 
 
-Lastly, I needed data on airports and navaids. This comes from [ourairports](https://ourairports.com/data/). This is, frankly, not the best dataset. It is by far the easiest to use, but there were a lot of inaccuracies for airports near me (I did make an account and correct the ones I knew about, but I'm sure there are more).
+Lastly, I needed data on airports and navaids. This comes from [ourairports.com](https://ourairports.com/data/). This is, frankly, not the best dataset. It is by far the easiest to use, but there were a lot of inaccuracies for airports near me (I did make an account and correct the ones I knew about, but I'm sure there are more).
 
 I'd love to eventually integrate a more official source, like the FAA ADIP API (assuming I can figure out how to even get access to it).
 
