@@ -38,7 +38,7 @@ But it is probably going to hurt.
 
 Aircraft engines are surprisingly reliable. So long as you are aware of the risks, and know what needs to be done to survive, I wouldn't judge those who chose to fly over inhospitable terrain in single engine aircraft. After all, you could make an argument that a sizeable portion of Alaska's transportation infrastructure is just that.
 
-But there are also plenty of ways to manage this risk. I liked to take a gander in Google Earth and see what was around the airports I fly between to see if there is cause for concern. And for the most part I was just looking for areas with flat land, with no trees or structures. And what follows is really just a stream-lined version of that.
+But there are also plenty of ways to manage this risk. I like to take a gander in Google Earth and see what was around the airports I fly between to see if there is cause for concern. And for the most part I was just looking for areas with flat land, with no trees or structures. And what follows is really just a stream-lined version of that.
 
 After smashing together a few different publicly available data-sets, I wound up with what I think is a fairly accurate guess of *safer* forced landing options. And while I was at it, I made a tool to query this data (and it has a few other neat tricks too).
 
@@ -298,7 +298,7 @@ As previously mentioned, the unit of work is a 1x1 degree DEM raster, so we can 
 
 And I'll go more into how the frontend works another day, but here is what the current (very primitive) interface looks like:
 
-<img src="../../images/field_finder/kgtu_departure.png" alt="Image showing UI from the departue airport with landable areas" />
+<img src="../../images/field_finder/kgtu_departure.png" alt="Image showing UI from the departure airport with landable areas" />
 
 We have a place to enter a route string (it isn't correctly parsing all routes yet, but if your route only includes airfields and navaids in the Ourairports dataset, it should work fine). The line is rendered from the departure airport to the destination airport and is colored as so:
 - Magenta, if you can glide to a runway
