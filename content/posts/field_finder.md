@@ -9,12 +9,12 @@ draft = false
 	tags = ["Rust", "Typescript", "Webapp", "Aviation"]
 +++
 
-<img src="../../images/field_finder_gis_header.png" alt="A screenshot showing a route and a bunch of green squares" />
+<!-- <img src="../../images/field_finder_gis_header.png" alt="A screenshot showing a route and a bunch of green squares" /> -->
 
 
 In the case of engine failure, how screwed are you?
 
-As of the time of writing, most of my flight experience has been over a particularly flat part of central Texas. Even better, there are a bunch of nice farmers around to maintain emergency runways (though, annoyingly, they do tend to plant crops on them). Doing simulated engine failures and fires over our practice area is pretty hard to mess up. Just point the aircraft in a random direction, and chances are there will be a large flat field there.
+As of the time of writing, most of my flight experience has been in single-engine aircraft over a particularly flat and reasonably unobstructed part of central Texas. There are a bunch of nice farmers around to maintain emergency runways (though, annoyingly, they do tend to plant crops on them). Doing simulated engine failures and fires over our practice area is pretty hard to mess up. Just point the aircraft in a random direction, and chances are there will be a large flat field there.
 
 <img src="../../images/plenty_of_fields.jpg" alt="Picture taken from a piper archer in an area north of Georgetown showing a ton of fields" />
 
@@ -22,7 +22,7 @@ But, heading back towards our home airport (KGTU), that quickly changes as you c
 
 # A Brief Aside: Crash Survivability
 
-This is a post about an interesting experiment I did with GIS data, not about aviation safety. But since the subject matter involves forced landings, I think a small PSA is in order. 
+This is a post about an interesting experiment I did with GIS data, not about aviation safety. But since the subject matter involves forced landings, a small PSA is in order. As someone who's both risk-avoidant and drawn to aviation, I'm naturally inclined to think through worst-case scenarios. I find that understanding the edge cases makes the activity less intimidating, not more. So when the emergency procedure says "select an adequate field for landing," I had to wonder: what happens when there isn't one?
 
 A few years ago, a small plane experienced an engine failure a ways out from KGTU, and landed short of the runway, into a house:
 
@@ -85,7 +85,7 @@ We want to find runway-like surfaces. These are surfaces that are flat and free 
 
 So let's focus on the first objective: finding flat areas.
 
-The SRTM dataset is divided into 1°x1° tiles, so these will be our unit of work. I wrote a `pipeline-runner` binary in rust that will perform each processing step on a per-tile basis. This pipeline writes to various PostGIS tables that represent each step of data refinement, and this allows us to use a lot of native PostGIS functions (which are highly optimized) to help us process our data more easily. We also use Rust [GDAL](https://gdal.org/en/stable/) bindings for certain steps as well.
+The SRTM dataset is divided into 1°x1° tiles, so these will be our unit of work. I wrote a pipeline-runner binary in rust that will perform each processing step on a per-tile basis. This pipeline writes to various PostGIS tables that represent each step of data refinement, and this allows us to use a lot of native PostGIS functions (which are highly optimized) to help us process our data more easily. We also use Rust [GDAL](https://gdal.org/en/stable/) bindings for certain steps as well.
 
 A very easy data source to work with is a raster Digital Elevation Model (DEM). These are usually `.tif` files (such as in the case of the SRTM3 dataset), though they can really be in any image format (since they are a simple raster). The point is, the band value (usually there is only one band in a DEM, since they usually only encode elevation) corresponds to elevation (and the metadata will help you derive the actual elevation from this value). Here is a render of a DEM .tif from a sampled version of the SRTM3 dataset, centered around Austin, Texas:
 
@@ -355,15 +355,15 @@ And here, we have a very long perfectly runway shaped field, but unfortunately t
 
 This is a partially solvable problem, as there are several datasets that can be combined to create linesegments for most high voltage power lines in the contiguous US. We could do something similar to (or combined with) our slope mask earlier. Take these vectors, convert them to a true/false raster (adding some buffer depending on the height of the towers), and then use that as an additional mask (or merge it with the existing one). It won't get all power lines, but it should get most of the big ones.
 
-Additionally, the one huge thing that is missing here is winds. A lot of the existing code was designed with winds in mind, but I'm honestly not sure how I want to implement that yet.
+Additionally, the one huge thing that is missing here is winds. A lot of the existing code was designed with winds in mind, but I'm honestly not sure how I want to implement that from a UI perspective yet.
 
 # Closing
 
-This tool won't tell you whether a field is safe to land in. Only your eyes and judgment can do that. For me, the results aren't a go/no-go decision—they're just an easy way to load this aspect of the flight into my head during preflight. The tool highlights where options thin out, what altitudes might be worth considering, and which parts of the route deserve extra attention. And it can answer questions that would be tedious to answer manually, like what altitude you need to maintain to stay within gliding range of a runway.
+This tool won't tell you whether a field is safe to land in. Only your eyes and judgment can do that. For me, the results aren't a go/no-go decision. They're just an easy way to load this aspect of the flight into my head during preflight. The tool highlights where options thin out, what altitudes might be worth considering, and which parts of the route deserve extra attention. And it can answer questions that would be tedious to answer manually, like what altitude you need to maintain to stay within gliding range of a runway.
 
 The datasets here are massive (the SRTM and NLCD data cover the entire continental US at high resolution), which made the pipeline work particularly satisfying. There's something deeply appealing about turning gigabytes of elevation and land cover data into what I hope will be actionable flight planning information.
 
-This is very much a work in progress. The power line masking needs implementation, the classification accuracy could improve with some ML-based satellite imagery analysis, and wind calculations remain an open question. And I haven't even looked into the practicality of using LIDAR data in urban areas (it turns out, there are a lot of public lidar datasets). I'll likely revisit this project as I refine the algorithms and expand coverage.
+This is very much a work in progress. The power line masking needs implementation, the classification accuracy could improve with some ML-based satellite imagery analysis, etc. And I haven't even looked into the practicality of using LIDAR data in urban areas (it turns out, there are a lot of public lidar datasets). I'll likely revisit this project as I refine the algorithms and expand coverage.
 
 I'd like to eventually host this somewhere publicly accessible, but I haven't worked out how to do that without it becoming a money pit. The infrastructure itself is straightforward—PostGIS database, API server, caching layer—but serving vector tiles for the entire continental US to an unknown number of users means either paying for capacity I don't need most days, or getting surprised by a bill when someone posts it on Reddit. For now, I'm focused on getting the data pipeline and algorithms right. Deployment can wait until I figure out sustainable hosting.
 
