@@ -361,7 +361,7 @@ Additionally, the one huge thing that is missing here is winds. A lot of the exi
 
 This tool won't tell you whether a field is safe to land in. Only your eyes and judgment can do that. What it *can* do is highlight where your options thin out, so you know where to look more carefully during preflight planning. And it can answer questions that would be tedious to answer manually, like what altitude you need to maintain to stay within gliding range of a runway.
 
-The datasets here are massive (the SRTM and NLCD data cover the entire continental US at high resolution), which made the pipeline work particularly satisfying. There's something deeply appealing about turning gigabytes of elevation and land cover data into actionable flight planning information.
+The datasets here are massive (the SRTM and NLCD data cover the entire continental US at high resolution), which made the pipeline work particularly satisfying. There's something deeply appealing about turning gigabytes of elevation and land cover data into what I hope will be actionable flight planning information.
 
 This is very much a work in progress. The power line masking needs implementation, the classification accuracy could improve with some ML-based satellite imagery analysis, and wind calculations remain an open question. And I haven't even looked into the practicality of using LIDAR data in urban areas (it turns out, there are a lot of public lidar datasets). I'll likely revisit this project as I refine the algorithms and expand coverage.
 
