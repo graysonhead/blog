@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+
+    
+    <title>
+         Bevy Procedural Earth Part 1: Mesh
+        
+    </title>
+
+    
+    <meta property="og:title"
+        content="Bevy Procedural Earth Part 1: Mesh" />
+    
+    
+
+    
+    
+    
+
+    
+    
+    
+
+    
+
+    
+
+    
+
+    
+    
+    <script src=https://blog.graysonhead.net/js/feather.min.js></script>
+    
+
+
+    
+    <link href=https://blog.graysonhead.net/css/fonts.css rel="stylesheet" />
+    
+
+    <link rel="stylesheet" type="text/css" media="screen" href=https://blog.graysonhead.net/css/main.css />
+
+    
+    <link rel="stylesheet" id="darkModeStyle" type="text/css" href=https://blog.graysonhead.net/css/dark.css   />
+    
+
+
+    
+
+
+</head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-CCTJX63WS9"></script>
+<script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    gtag('js', new Date());
+
+    gtag('config', 'G-CCTJX63WS9');
+</script>
+
+<body>
+    <div class="content">
+        <header>
+    <div class="main" id="main_title">
+        <a href=https:&#x2F;&#x2F;blog.graysonhead.net></a>
+    </div>
+
+    <nav>
+        
+            <a href=&#x2F;posts>&#x2F;posts</a>
+        
+            <a href=&#x2F;projects>&#x2F;projects</a>
+        
+            <a href=&#x2F;about>&#x2F;about</a>
+        
+
+        
+            |
+
+            
+                <a href=&#x2F;>en</a>
+            
+        
+
+        
+    </nav>
+</header>
+
+
+        
+    
+<main>
+    <article>
+        <div class="title">
+            <h1 class="title">Bevy Procedural Earth Part 1: Mesh</h1>
+            <div class="meta">
+                
+                on  2023-10-03
+
+                
+            </div>
+        </div>
+
+        
+
+        <section class="body">
+            <img src="../../images/earth_banner.png" alt="A sneak peek at the finished project; A picture of earth." />
+<p>Of all the youtube game vloggers on the internet, <a href="https://www.youtube.com/@SebastianLague">Sebastian Lague</a> is probably my favorite. Even though I have never written anything in Unity (and probably never will, especially given recent events.) I still find a lot of his videos inspirational.</p>
+<p>One of his <a href="https://youtu.be/sLqXFF8mlEU?si=YTEgdMKiDiSr2nzk">videos</a> in particular spurred me to do something I previously didn't have a whole lot of interest in: procedurally generating meshes. So I decided to go about implementing his idea in Bevy with a few twists.</p>
+<p>While his video was a excellent starting spot, C# and Rust are drastically different languages so translating between them didn't always get me the results I expected. In addition, there were some bits he glossed over (forgivable, otherwise the video would have been 6 hours long) that I felt deserved a bit more explanation in text form.</p>
+<p>Now, some disclaimers; I'm probably not going to be able to publish the full source of this project because the assets are far too large for Github. I may publish a torrent magnet link or something at some point, but if you want to follow along you will need to fill in some of the blank spots yourself as I'm going to be sharing piecemeal examples to illustrate some of the parts I found more difficult or less obvious (And yes, I know I just complained about people glossing over things. Sorry, not sorry.) If you have questions, feel free to reach out to me (<a href="https://hachyderm.io/@Darkside">mastadon</a> is probably the best way.)</p>
+<p>Also, fair warning, the example code is not minimal in any way and will be quite dense. It took me weeks to learn this stuff, so unpacking it all in a blog post is bound to be an interesting exercise.</p>
+<p>So, disclaimer out of the way, lets get started.</p>
+<h1 id="from-planes-a-sphere">From Planes, A Sphere</h1>
+<p>Like in Sebastian's video, I'm also going to construct my earth from a set of planes. However, I wanted to be able to subdivide the earth into more than 6 planes as I wanted to support higher levels of zoom with higher resolution meshes. More objects means more culling (since you don't have to send quite as much data to the videocard memory at any given time) so my method is a little harder to follow than Sebastians:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">generate_face</span><span>(
+</span><span>    </span><span style="color:#bf616a;">normal</span><span>: Vec3,
+</span><span>    </span><span style="color:#bf616a;">resolution</span><span>: </span><span style="color:#b48ead;">u32</span><span>,
+</span><span>    </span><span style="color:#bf616a;">x_offset</span><span>: </span><span style="color:#b48ead;">f32</span><span>,
+</span><span>    </span><span style="color:#bf616a;">y_offset</span><span>: </span><span style="color:#b48ead;">f32</span><span>,
+</span><span>) -&gt; Mesh {
+</span><span>    </span><span style="color:#b48ead;">let</span><span> axis_a = Vec3::new(normal.y, normal.z, normal.x); </span><span style="color:#65737e;">// Horizontal
+</span><span>    </span><span style="color:#b48ead;">let</span><span> axis_b = axis_a.</span><span style="color:#96b5b4;">cross</span><span>(normal); </span><span style="color:#65737e;">// Vertical
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// Create a vec of verticies and indicies
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> verticies: Vec&lt;Vec3&gt; = Vec::new();
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> indicies: Vec&lt;</span><span style="color:#b48ead;">u32</span><span>&gt; = Vec::new();
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> normals = Vec::new();
+</span><span>    </span><span style="color:#b48ead;">for</span><span> y in </span><span style="color:#d08770;">0</span><span>..(resolution) {
+</span><span>        </span><span style="color:#b48ead;">for</span><span> x in </span><span style="color:#d08770;">0</span><span>..(resolution) {
+</span><span>            </span><span style="color:#b48ead;">let</span><span> i = x + y * resolution;
+</span><span>
+</span><span>            </span><span style="color:#b48ead;">let</span><span> percent = Vec2::new(x as </span><span style="color:#b48ead;">f32</span><span>, y as </span><span style="color:#b48ead;">f32</span><span>) / (resolution - </span><span style="color:#d08770;">1</span><span>) as </span><span style="color:#b48ead;">f32</span><span>;
+</span><span>            </span><span style="color:#b48ead;">let</span><span> point_on_unit_cube =
+</span><span>                normal + (percent.x - x_offset) * axis_a + (percent.y - y_offset) * axis_b;
+</span><span>            </span><span style="color:#b48ead;">let</span><span> point_coords: Coordinates = point_on_unit_cube.</span><span style="color:#96b5b4;">normalize</span><span>().</span><span style="color:#96b5b4;">into</span><span>();
+</span><span>
+</span><span>			</span><span style="color:#b48ead;">let</span><span> normalized_point = point_on_unit_cube.</span><span style="color:#96b5b4;">normalize</span><span>() * </span><span style="color:#d08770;">EARTH_RADIUS</span><span>;
+</span><span>
+</span><span>            verticies.</span><span style="color:#96b5b4;">push</span><span>(normalized_point);
+</span><span>
+</span><span>            normals.</span><span style="color:#96b5b4;">push</span><span>(-point_on_unit_cube.</span><span style="color:#96b5b4;">normalize</span><span>());
+</span><span>
+</span><span>            </span><span style="color:#b48ead;">if</span><span> x != resolution - </span><span style="color:#d08770;">1 </span><span>&amp;&amp; y != resolution - </span><span style="color:#d08770;">1 </span><span>{
+</span><span>                </span><span style="color:#65737e;">// First triangle
+</span><span>                indicies.</span><span style="color:#96b5b4;">push</span><span>(i);
+</span><span>                indicies.</span><span style="color:#96b5b4;">push</span><span>(i + resolution);
+</span><span>                indicies.</span><span style="color:#96b5b4;">push</span><span>(i + resolution + </span><span style="color:#d08770;">1</span><span>);
+</span><span>
+</span><span>                </span><span style="color:#65737e;">// Second triangle
+</span><span>                indicies.</span><span style="color:#96b5b4;">push</span><span>(i);
+</span><span>                indicies.</span><span style="color:#96b5b4;">push</span><span>(i + resolution + </span><span style="color:#d08770;">1</span><span>);
+</span><span>                indicies.</span><span style="color:#96b5b4;">push</span><span>(i + </span><span style="color:#d08770;">1</span><span>);
+</span><span>            }
+</span><span>        }
+</span><span>    }
+</span><span>    </span><span style="color:#b48ead;">let</span><span> indicies = mesh::Indices::</span><span style="color:#d08770;">U32</span><span>(indicies);
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> mesh = Mesh::new(PrimitiveTopology::TriangleList);
+</span><span>    mesh.</span><span style="color:#96b5b4;">set_indices</span><span>(Some(indicies));
+</span><span>    mesh.</span><span style="color:#96b5b4;">insert_attribute</span><span>(Mesh::</span><span style="color:#d08770;">ATTRIBUTE_POSITION</span><span>, verticies);
+</span><span>    mesh.</span><span style="color:#96b5b4;">insert_attribute</span><span>(Mesh::</span><span style="color:#d08770;">ATTRIBUTE_NORMAL</span><span>, normals);
+</span><span>    mesh.</span><span style="color:#96b5b4;">generate_tangents</span><span>().</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span>    mesh
+</span><span>}
+</span></code></pre>
+<p>So, lets break this down a bit further:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">generate_face</span><span>(
+</span><span>    </span><span style="color:#bf616a;">normal</span><span>: Vec3,
+</span><span>    </span><span style="color:#bf616a;">resolution</span><span>: </span><span style="color:#b48ead;">u32</span><span>,
+</span><span>    </span><span style="color:#bf616a;">x_offset</span><span>: </span><span style="color:#b48ead;">f32</span><span>,
+</span><span>    </span><span style="color:#bf616a;">y_offset</span><span>: </span><span style="color:#b48ead;">f32</span><span>,
+</span><span>) -&gt; Mesh {
+</span></code></pre>
+<p>Starting with the signature, we are going to generate a plane facing in a direction, the direction is determined by the <code>normal</code>. This will make more sense when we look a the wrapper function that calls this one.</p>
+<p>Our <code>resolution</code> determines the number of vertices we will generate.</p>
+<p>The <code>x_offset</code> and <code>y_offset</code> will determine the offset from the central vector. This might not be very intuitive, but it allows us to generate more than 1 plane per &quot;side&quot; of the cube (that we will then turn into a sphere.) Again, this will be clearer once we see the wrapper function.</p>
+<p>And our output will be a <a href="https://docs.rs/bevy/latest/bevy/prelude/struct.Mesh.html">Mesh</a>.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">let</span><span> axis_a = Vec3::new(normal.y, normal.z, normal.x); </span><span style="color:#65737e;">// Horizontal
+</span><span style="color:#b48ead;">let</span><span> axis_b = axis_a.</span><span style="color:#96b5b4;">cross</span><span>(normal); </span><span style="color:#65737e;">// Vertical
+</span></code></pre>
+<p>From our normal direction, we can derive the direction of our <code>x</code> and <code>y</code> axes of the plane. Fortunately this is very easy as Bevy provides some nice helper methods.</p>
+<p>Then we initialize some things we will push various kinds of data into</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#65737e;">// Create a vec of verticies and indicies
+</span><span style="color:#b48ead;">let mut</span><span> verticies: Vec&lt;Vec3&gt; = Vec::new();
+</span><span style="color:#b48ead;">let mut</span><span> indicies: Vec&lt;</span><span style="color:#b48ead;">u32</span><span>&gt; = Vec::new();
+</span><span style="color:#b48ead;">let mut</span><span> normals = Vec::new();
+</span></code></pre>
+<p>And now it gets a little more interesting.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">for</span><span> y in </span><span style="color:#d08770;">0</span><span>..(resolution) {
+</span><span>        </span><span style="color:#b48ead;">for</span><span> x in </span><span style="color:#d08770;">0</span><span>..(resolution) {
+</span><span>            </span><span style="color:#b48ead;">let</span><span> i = x + y * resolution;
+</span><span>
+</span><span>            </span><span style="color:#b48ead;">let</span><span> percent = Vec2::new(x as </span><span style="color:#b48ead;">f32</span><span>, y as </span><span style="color:#b48ead;">f32</span><span>) / (resolution - </span><span style="color:#d08770;">1</span><span>) as </span><span style="color:#b48ead;">f32</span><span>;
+</span><span>            </span><span style="color:#b48ead;">let</span><span> point_on_unit_cube =
+</span><span>                normal + (percent.x - x_offset) * axis_a + (percent.y - y_offset) * axis_b;
+</span><span>            </span><span style="color:#b48ead;">let</span><span> point_coords: Coordinates = point_on_unit_cube.</span><span style="color:#96b5b4;">normalize</span><span>().</span><span style="color:#96b5b4;">into</span><span>();
+</span><span>			</span><span style="color:#b48ead;">let</span><span> normalized_point = point_on_unit_cube.</span><span style="color:#96b5b4;">normalize</span><span>() * </span><span style="color:#d08770;">EARTH_RADIUS</span><span>;
+</span><span>
+</span><span>            verticies.</span><span style="color:#96b5b4;">push</span><span>(normalized_point);
+</span><span>
+</span><span>            normals.</span><span style="color:#96b5b4;">push</span><span>(-point_on_unit_cube.</span><span style="color:#96b5b4;">normalize</span><span>());
+</span><span>
+</span><span>            </span><span style="color:#b48ead;">if</span><span> x != resolution - </span><span style="color:#d08770;">1 </span><span>&amp;&amp; y != resolution - </span><span style="color:#d08770;">1 </span><span>{
+</span><span>                </span><span style="color:#65737e;">// First triangle
+</span><span>                indicies.</span><span style="color:#96b5b4;">push</span><span>(i);
+</span><span>                indicies.</span><span style="color:#96b5b4;">push</span><span>(i + resolution);
+</span><span>                indicies.</span><span style="color:#96b5b4;">push</span><span>(i + resolution + </span><span style="color:#d08770;">1</span><span>);
+</span><span>
+</span><span>                </span><span style="color:#65737e;">// Second triangle
+</span><span>                indicies.</span><span style="color:#96b5b4;">push</span><span>(i);
+</span><span>                indicies.</span><span style="color:#96b5b4;">push</span><span>(i + resolution + </span><span style="color:#d08770;">1</span><span>);
+</span><span>                indicies.</span><span style="color:#96b5b4;">push</span><span>(i + </span><span style="color:#d08770;">1</span><span>);
+</span><span>            }
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>The first part is probably pretty intuitive, we have a loop for <code>y</code> and <code>x</code> in resolution. This means that a resolution of 100 will result in 100x100 verticies per face. Next we have this <code>i</code> value, which is an Index. An index for what you might ask? Don't get ahead of yourself, we are going to spend a lot of time talking about this index in a minute.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">let</span><span> percent = Vec2::new(x as </span><span style="color:#b48ead;">f32</span><span>, y as </span><span style="color:#b48ead;">f32</span><span>) / (resolution - </span><span style="color:#d08770;">1</span><span>) as </span><span style="color:#b48ead;">f32</span><span>;
+</span></code></pre>
+<p>We need to know how far along we are with each face, so this will keep track of that in a vec2 for the x and y axis respectively.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">let</span><span> point_on_unit_cube =
+</span><span>	normal + (percent.x - x_offset) * axis_a + (percent.y - y_offset) * axis_b;
+</span><span style="color:#b48ead;">let</span><span> point_coords: Coordinates = point_on_unit_cube.</span><span style="color:#96b5b4;">normalize</span><span>().</span><span style="color:#96b5b4;">into</span><span>();
+</span><span style="color:#b48ead;">let</span><span> normalized_point = point_on_unit_cube.</span><span style="color:#96b5b4;">normalize</span><span>() * </span><span style="color:#d08770;">EARTH_RADIUS</span><span>;
+</span></code></pre>
+<p>Now we generate the actual xyz coordinates of our sphere. Now it may have seemed like we were going to generate a cube out of planes and then flatten them later, but in reality its a lot easier to do this in one step.</p>
+<p>First we need to get the point on unit cube, this would be the pre-sphere point (if you used these coordinates for the verticies, it would actually be a cube with flat sides.) This is done by taking the normal and adding the normal plus our x and y percents, minus our x and y offset, times our <code>axis_a</code> and <code>axis_b</code> vectors.</p>
+<p>Next, we take the resulting <a href="https://docs.rs/bevy/latest/bevy/math/struct.Vec3.html">Vec3</a> and <a href="https://docs.rs/bevy/latest/bevy/math/struct.Vec3.html#method.normalize">normalize</a> it. This is the step where our cube becomes a sphere. </p>
+<p>Now that we have the normalized point, we can make the earth whatever radius we want, in this case I'm using a constant of <code>300.0</code>, but you can make it whatever radius you want.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span>verticies.</span><span style="color:#96b5b4;">push</span><span>(normalized_point);
+</span><span>normals.</span><span style="color:#96b5b4;">push</span><span>(-point_on_unit_cube.</span><span style="color:#96b5b4;">normalize</span><span>());
+</span></code></pre>
+<p>Now we need to push our normalized point to our verticies vec. Additionally, we will re-use our point_on_unit_cube variable to set the normal for this vertex correctly. This step probably isn't necessary; all of my normals were the correct way (we will talk about why in a second), but it is probably a good practice.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">if</span><span> x != resolution - </span><span style="color:#d08770;">1 </span><span>&amp;&amp; y != resolution - </span><span style="color:#d08770;">1 </span><span>{
+</span><span>	</span><span style="color:#65737e;">// First triangle
+</span><span>	indicies.</span><span style="color:#96b5b4;">push</span><span>(i);
+</span><span>	indicies.</span><span style="color:#96b5b4;">push</span><span>(i + resolution);
+</span><span>	indicies.</span><span style="color:#96b5b4;">push</span><span>(i + resolution + </span><span style="color:#d08770;">1</span><span>);
+</span><span>
+</span><span>	</span><span style="color:#65737e;">// Second triangle
+</span><span>	indicies.</span><span style="color:#96b5b4;">push</span><span>(i);
+</span><span>	indicies.</span><span style="color:#96b5b4;">push</span><span>(i + resolution + </span><span style="color:#d08770;">1</span><span>);
+</span><span>	indicies.</span><span style="color:#96b5b4;">push</span><span>(i + </span><span style="color:#d08770;">1</span><span>);
+</span><span>}
+</span></code></pre>
+<p>Now we need to unwrap this. In doing so, we will learn a fundemental truth of video-cards:</p>
+<h1 id="everything-is-a-triangle">Everything Is a Triangle</h1>
+<p>So we have a list of verticies already, and its probably rather intuitive that these verticies will make up the points of our mesh. But how do we draw the lines between each adjacent vertex in our plane? Heck, which vertexes do we draw lines between in the first place?</p>
+<p>To answer this question, we have to talk about video cards. Video cards can only draw triangles <sup class="footnote-reference"><a href="#1">1</a></sup>. As a result, we need to construct our mesh from triangles. There are a lot of ways to do that, but we will be using Bevy's <a href="https://docs.rs/bevy/latest/bevy/render/mesh/enum.PrimitiveTopology.html#variant.TriangleList">PrimitiveTopology::TriangleList</a>.</p>
+<p>This is one of the more primitive ways of constructing a mesh, but its also the closest to how the video card is actually going to render things which makes it very powerful (and often a bit less confusing for simpler shapes, like a plane.)</p>
+<p>To generate this kind of mesh, we need two things (at a minium).</p>
+<ul>
+<li>A list of Vertex positions</li>
+<li>A list of Indicies that defining triangles</li>
+</ul>
+<p>To explain this, lets start with a simple 2d example:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>
+</span><span> (0, 0)              (1, 0)
+</span><span>
+</span><span>   ┌───────────────────┐
+</span><span>   │                   │
+</span><span>   │                   │
+</span><span>   │                   │
+</span><span>   │                   │
+</span><span>   │                   │
+</span><span>   │                   │
+</span><span>   │                   │
+</span><span>   └───────────────────┘
+</span><span>
+</span><span> (0, 1)              (1, 1)
+</span><span>
+</span></code></pre>
+<p>Since we must create our mesh from triangles, we need two triangles to re-create this box. For example:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>Triangle 1: [(0,0), (1,0), (0,1)]
+</span><span>Triangle 2: [(0,1), (1,0), (1,1)]
+</span></code></pre>
+<p>However, this isn't going to work for our video card, because the order in which you specify the verticies is extremely important. In order to save a ton of memory and GPU cycles, most graphics libraries implement something called &quot;backface culling&quot; by default. This means they will only render one side of each triangle. So how do you tell the videocard which side of the face is the &quot;front&quot; vs the &quot;back&quot;?</p>
+<p>According to the <a href="https://docs.rs/bevy/latest/bevy/prelude/struct.Mesh.html#use-with-standardmaterial">docs</a>:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>Vertex winding order: by default, StandardMaterial.cull_mode is Some
+</span><span>(Face::Back), which means that Bevy would only render the “front” of each 
+</span><span>triangle, which is the side of the triangle from where the vertices appear 
+</span><span>in a counter-clockwise order.
+</span></code></pre>
+<p>This is our answer, the winding order of the verticies tells the videocard which side of the triangle is the &quot;front&quot; vs &quot;back.&quot; If you want the face facing you, you wind from the counter-clockwise direction when looking at it from the outside (Or the &quot;normal&quot; direction.)</p>
+<p>So a valid set of triangles for our example could be:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>1: [(1,0), (0,0), (0,1)]
+</span><span>2: [(1,1), (1,0), (0,1)]
+</span></code></pre>
+<p>But how do we specify that in Bevy? Now we need to return to the Index we glossed over earlier.</p>
+<p>Remember I said before we needed two things: A list of Verticies and an index that defines triangles? Well now that we know they must be counter-clockwise, we are armed with all the information we need to go about making them.</p>
+<p>So, our list of verticies could be:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>[(0,0), (0,1), (1,0), (1,1)]
+</span></code></pre>
+<p>And the indexes for our two triangles could be:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>[0, 1, 2, 0, 2, 1]
+</span></code></pre>
+<p>This would mean our two triangles are:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>1: [(1,0), (0,0), (0,1)]
+</span><span>2: [(1,1), (1,0), (0,1)]
+</span></code></pre>
+<p>If you aren't sure you got that, read it again and try to let it sink in. Its not intuitive <em>at all</em>, so don't feel bad if doesn't make much sense at first.</p>
+<p>Once you grok that, we can go back to the code that generates our indexes:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">if</span><span> x != resolution - </span><span style="color:#d08770;">1 </span><span>&amp;&amp; y != resolution - </span><span style="color:#d08770;">1 </span><span>{
+</span><span>	</span><span style="color:#65737e;">// First triangle
+</span><span>	indicies.</span><span style="color:#96b5b4;">push</span><span>(i);
+</span><span>	indicies.</span><span style="color:#96b5b4;">push</span><span>(i + resolution);
+</span><span>	indicies.</span><span style="color:#96b5b4;">push</span><span>(i + resolution + </span><span style="color:#d08770;">1</span><span>);
+</span><span>
+</span><span>	</span><span style="color:#65737e;">// Second triangle
+</span><span>	indicies.</span><span style="color:#96b5b4;">push</span><span>(i);
+</span><span>	indicies.</span><span style="color:#96b5b4;">push</span><span>(i + resolution + </span><span style="color:#d08770;">1</span><span>);
+</span><span>	indicies.</span><span style="color:#96b5b4;">push</span><span>(i + </span><span style="color:#d08770;">1</span><span>);
+</span><span>}
+</span></code></pre>
+<p>Now, lets apply this to our 2d box example (which has a resolution of 2):</p>
+<p>Starting at index 0, our first triangle indexes are:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>(i, i+1, i+1+1)
+</span></code></pre>
+<p>Or:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>(0, 1, 2)
+</span></code></pre>
+<p>And our second triangle indexes are:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>(i, i+1+1, i+1)
+</span></code></pre>
+<p>Or:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>(0, 2, 1)
+</span></code></pre>
+<p>Note that this strategy is entirely dependent on the way our loops are structured:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">for</span><span> y in </span><span style="color:#d08770;">0</span><span>..(resolution) {
+</span><span>	</span><span style="color:#b48ead;">for</span><span> x in </span><span style="color:#d08770;">0</span><span>..(resolution) {
+</span><span>	}
+</span><span>}
+</span></code></pre>
+<p>Because we are iterating over the y axis first and creating columns along the x axis, we need our index to look like:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>
+</span><span> 0                     2
+</span><span>
+</span><span>   ┌───────────────────┐
+</span><span>   │                   │
+</span><span>   │                   │
+</span><span>   │                   │
+</span><span>   │                   │
+</span><span>   │                   │
+</span><span>   │                   │
+</span><span>   │                   │
+</span><span>   └───────────────────┘
+</span><span>
+</span><span> 1                      3
+</span><span>
+</span></code></pre>
+<p>And the last important bit is our if condition of <code>x != resolution - 1 &amp;&amp; y != resolution - 1</code>. This ensures that we stop making triangles when we get to the end of a row or column.</p>
+<p>Now, we need a function to wrap this one that will generate all sides of our cube-sphere:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">generate_faces</span><span>(
+</span><span>    </span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">commands</span><span>: Commands,
+</span><span>    </span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">meshes</span><span>: ResMut&lt;Assets&lt;Mesh&gt;&gt;,
+</span><span>    </span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">materials</span><span>: ResMut&lt;Assets&lt;StandardMaterial&gt;&gt;,
+</span><span>    </span><span style="color:#bf616a;">asset_server</span><span>: Res&lt;AssetServer&gt;,
+</span><span>) {
+</span><span>    </span><span style="color:#b48ead;">let</span><span> faces = vec![
+</span><span>        Vec3::X,
+</span><span>        Vec3::</span><span style="color:#d08770;">NEG_X</span><span>,
+</span><span>        Vec3::Y,
+</span><span>        Vec3::</span><span style="color:#d08770;">NEG_Y</span><span>,
+</span><span>        Vec3::Z,
+</span><span>        Vec3::</span><span style="color:#d08770;">NEG_Z</span><span>,
+</span><span>    ];
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">let</span><span> offsets = vec![(</span><span style="color:#d08770;">0.0</span><span>, </span><span style="color:#d08770;">0.0</span><span>), (</span><span style="color:#d08770;">0.0</span><span>, </span><span style="color:#d08770;">1.0</span><span>), (</span><span style="color:#d08770;">1.0</span><span>, </span><span style="color:#d08770;">0.0</span><span>), (</span><span style="color:#d08770;">1.0</span><span>, </span><span style="color:#d08770;">1.0</span><span>)];
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> rng = rand::thread_rng();
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">for</span><span> direction in faces {
+</span><span>        </span><span style="color:#b48ead;">for</span><span> offset in &amp;offsets {
+</span><span>            commands.</span><span style="color:#96b5b4;">spawn</span><span>((
+</span><span>                PbrBundle {
+</span><span>                    mesh: meshes.</span><span style="color:#96b5b4;">add</span><span>(</span><span style="color:#96b5b4;">generate_face</span><span>(direction, </span><span style="color:#d08770;">16</span><span>, offset.</span><span style="color:#d08770;">0</span><span>, offset.</span><span style="color:#d08770;">1</span><span>, &amp;rs)),
+</span><span>                    material: materials.</span><span style="color:#96b5b4;">add</span><span>(StandardMaterial {
+</span><span>                        ..</span><span style="color:#96b5b4;">default</span><span>()
+</span><span>                    }),
+</span><span>                    ..</span><span style="color:#96b5b4;">default</span><span>()
+</span><span>                }
+</span><span>            ));
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>This function will generate 24 faces, 4 per side of the &quot;cube&quot;. The offsets and vectors hopefully make a bit more sense now.</p>
+<p>The nice thing is, this method scales up to any resolution, so you can play around with varying polygon counts very easily.</p>
+<p>And, here is what the end result looks like:</p>
+<img src="../../images/plain_mesh_sphere.png" alt="A boring, untextured, sphere." />
+<p>Not looking very interesting yet, is it? Don't worry, we will fix that soon! Stay tuned for Part 2.</p>
+<div class="footnote-definition" id="1"><sup class="footnote-definition-label">1</sup>
+<p>This is an Oversimplification. Video cards can draw all kinds of polygons in 2d. But in a 3d mesh, everything is always decomposed to triangles first. The chief reason being: 3 verticies is the exact number you need to uniquely specify a plane.</p>
+</div>
+
+        </section>
+
+        
+            <div class="post-tags">
+                <nav class="nav tags">
+                    <ul class="tags">
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/rust/>Rust</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/bevy/>Bevy</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/gamedev/>Gamedev</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/procedural-mesh/>Procedural Mesh</a></li>
+                        
+                    </ul>
+                </nav>
+            </div>
+        
+
+    </article>
+</main>
+
+
+
+        <footer>
+	<div style="display:flex">
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;github.com&#x2F;graysonhead title=GitHub>
+	         <i data-feather=github></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;hachyderm.io&#x2F;@Darkside title=Mastadon>
+	         <i data-feather=globe></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;www.linkedin.com&#x2F;in&#x2F;graysonhead&#x2F; title=LinkedIn>
+	         <i data-feather=linkedin></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;pixel.tchncs.de&#x2F;i&#x2F;web title=PixelFed>
+	         <i data-feather=camera></i>
+	     </a>
+	 
+	 </div>
+	 <div class="footer-info">
+	 2026 © Grayson Head
+        </div>
+</footer>
+
+
+<script>
+	    feather.replace();
+</script>
+
+
+    </div>
+</body>
+
+</html>

@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+
+    
+    <title>
+         Bevy Procedural Earth Part 2: Coordinate Systems and Materials
+        
+    </title>
+
+    
+    <meta property="og:title"
+        content="Bevy Procedural Earth Part 2: Coordinate Systems and Materials" />
+    
+    
+
+    
+    
+    
+
+    
+    
+    
+
+    
+
+    
+
+    
+
+    
+    
+    <script src=https://blog.graysonhead.net/js/feather.min.js></script>
+    
+
+
+    
+    <link href=https://blog.graysonhead.net/css/fonts.css rel="stylesheet" />
+    
+
+    <link rel="stylesheet" type="text/css" media="screen" href=https://blog.graysonhead.net/css/main.css />
+
+    
+    <link rel="stylesheet" id="darkModeStyle" type="text/css" href=https://blog.graysonhead.net/css/dark.css   />
+    
+
+
+    
+
+
+</head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-CCTJX63WS9"></script>
+<script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    gtag('js', new Date());
+
+    gtag('config', 'G-CCTJX63WS9');
+</script>
+
+<body>
+    <div class="content">
+        <header>
+    <div class="main" id="main_title">
+        <a href=https:&#x2F;&#x2F;blog.graysonhead.net></a>
+    </div>
+
+    <nav>
+        
+            <a href=&#x2F;posts>&#x2F;posts</a>
+        
+            <a href=&#x2F;projects>&#x2F;projects</a>
+        
+            <a href=&#x2F;about>&#x2F;about</a>
+        
+
+        
+            |
+
+            
+                <a href=&#x2F;>en</a>
+            
+        
+
+        
+    </nav>
+</header>
+
+
+        
+    
+<main>
+    <article>
+        <div class="title">
+            <h1 class="title">Bevy Procedural Earth Part 2: Coordinate Systems and Materials</h1>
+            <div class="meta">
+                
+                on  2023-10-06
+
+                
+            </div>
+        </div>
+
+        
+
+        <section class="body">
+            <img src="../../images/earth_banner_2.png" alt="A boring, untextured, sphere." />
+<p>In part <a href="https://blog.graysonhead.net/posts/bevy-proc-earth-1/">one</a> of this project, we went over the basics of mathematically constructing a mesh. At the end of it we were left with a segmented, but very boring grey sphere:</p>
+<img src="../../images/plain_mesh_sphere.png" alt="A boring, untextured, sphere." />
+<p>Obviously this is no fun, we want to get some textures on it. </p>
+<p>Now, there are lots of ways we could go about wrapping our texture, but I'm going to go about this in a somewhat unusual way. Since we are texturing a planet, and we have a lot of different maps with different projections to pick from, we are going to just select an appropriate one and calculate all our texture coordinates with latitude/longitude coordinates.</p>
+<h1 id="coordinate-systems-disambiguated">Coordinate Systems Disambiguated</h1>
+<p>By the end of this article, we will have 3 different coordinate systems involved in procedurally generating our facsimile earth, they are:</p>
+<h3 id="bevy-s-cartesian-coordinates">Bevy's Cartesian Coordinates</h3>
+<p>These are the X, Y, Z triplet that identifies the location of the Entity in 3d space. There is <a href="https://docs.rs/bevy/latest/bevy/transform/components/struct.GlobalTransform.html">GlobalTransform</a>, which is the absolute position of the Entity relative to the origin <code>(0, 0, 0)</code>. And the <a href="https://docs.rs/bevy/latest/bevy/transform/components/struct.Transform.html">Transform</a>, which is the position of the Entity relative to its parent (or the origin, if it has no parent.)</p>
+<p>This is the coordinate space that our individual vertices will exist in.</p>
+<h3 id="uv-texture-coordinates">UV (Texture) Coordinates</h3>
+<p>UV coordinates how flat textures are mapped onto the 3d surface of a mesh.</p>
+<img src="https://upload.wikimedia.org/wikipedia/commons/0/04/UVMapping.png" alt="UV Mapping Graph from Wikipedia https://creativecommons.org/licenses/by-sa/3.0/">
+<p>What U and V actually are, are a 2d coordinate system (usually from 0.0 to 1.0, but can also be by raw pixel count in some engines/apis.) We will assign each of our vertexes in 3d space onto this 2d coordinate system, and then the relevant segment of the 2d texture will be projected on each triangle that we generated in the last tutorial. </p>
+<h3 id="geodetic-coordinates">Geodetic Coordinates</h3>
+<p>Geodetic Coordinates are a pair of angles that describe the location of an object on the surface of a sphere. </p>
+<img src="../../images/Lat_Lon.svg" alt="" />
+<p>In reality, they aren't this simple. The objects we normally measure with Geodetic coordinates (such as earth) are not typically perfectly spherical. As a result of this (and computers), we have the wonderful field of GIS. (This has made a lot of software engineers very confused, and has been widely regarded as a bad move.) The variety of actual Geodetic systems, and their insanely large number of Datums (reference points from which spatial measurements are made) can make your head spin.</p>
+<p>However, you can go far in the field of GIS by pretending that earth is a sphere (<a href="https://www.sciencedirect.com/topics/earth-and-planetary-sciences/oblate-spheroids">which it definitely isn't</a>) and pretending all datums are WGS84 (or better yet, convert them). <sup class="footnote-reference"><a href="#1">1</a></sup> </p>
+<p>But for this project, it doesn't matter. We aren't optimizing for 10m accuracy, we just want a pretty earth.</p>
+<h2 id="converting-from-cartesian-to-uv">Converting from Cartesian to UV</h2>
+<p>Fortunately we have a somewhat direct method of converting between our Cartesian Coordinates and UV coordinates. In this example, we are going to use Geodetic Coordinates as a translation between them. </p>
+<p>Knowing that Positive longitudes are east of the Prime Meridian, negative west of the Prime Meridian, and Positive and Negative latitudes are north and south of the equator respectively, we can flatten these onto a 2d map with values that look like this:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>       -180 (W)                   0                     180 (E)
+</span><span>        ┌────────────────────────────────────────────────┐
+</span><span> +90 (N)│                                                │
+</span><span>        │                                                │
+</span><span>        │                                                │
+</span><span>        │                                                │
+</span><span>        │                                                │
+</span><span>  0     │                                                │
+</span><span>        │                                                │
+</span><span>        │                                                │
+</span><span>        │                                                │
+</span><span>        │                                                │
+</span><span> -90 (S)└────────────────────────────────────────────────┘
+</span></code></pre>
+<p>Which is more or less how Mercator projection works.</p>
+<p>All we need to do to convert a latitude/longitude pair to a position on our UV map. To do so, need to map the latitude and longitude from their normal ranges to 0.0 -&gt; 1.0. Which is accomplished by this pair of functions:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">map_latitude</span><span>(</span><span style="color:#bf616a;">lat</span><span>: </span><span style="color:#b48ead;">f32</span><span>) -&gt; Result&lt;</span><span style="color:#b48ead;">f32</span><span>, CoordError&gt; {
+</span><span>    </span><span style="color:#65737e;">// 90 -&gt; 0 maps to 0.0 to 0.5
+</span><span>    </span><span style="color:#65737e;">// 0 -&gt; -90 maps to 0.5 to 1.0
+</span><span>    </span><span style="color:#65737e;">// Ensure latitude is valid
+</span><span>    </span><span style="color:#b48ead;">if </span><span>!(-</span><span style="color:#d08770;">90.0</span><span>..=</span><span style="color:#d08770;">90.0</span><span>).</span><span style="color:#96b5b4;">contains</span><span>(&amp;lat) {
+</span><span>        </span><span style="color:#b48ead;">return </span><span>Err(CoordError {
+</span><span>            msg: &quot;</span><span style="color:#a3be8c;">Invalid latitude: {lat:?}</span><span>&quot;.</span><span style="color:#96b5b4;">to_string</span><span>(),
+</span><span>        });
+</span><span>    }
+</span><span>    </span><span style="color:#b48ead;">if </span><span>(</span><span style="color:#d08770;">90.0</span><span>..=</span><span style="color:#d08770;">0.0</span><span>).</span><span style="color:#96b5b4;">contains</span><span>(&amp;lat) {
+</span><span>        Ok(</span><span style="color:#96b5b4;">map</span><span>((</span><span style="color:#d08770;">90.0</span><span>, </span><span style="color:#d08770;">0.0</span><span>), (</span><span style="color:#d08770;">0.0</span><span>, </span><span style="color:#d08770;">0.5</span><span>), lat))
+</span><span>    } </span><span style="color:#b48ead;">else </span><span>{
+</span><span>        Ok(</span><span style="color:#96b5b4;">map</span><span>((</span><span style="color:#d08770;">0.0</span><span>, -</span><span style="color:#d08770;">90.0</span><span>), (</span><span style="color:#d08770;">0.5</span><span>, </span><span style="color:#d08770;">1.0</span><span>), lat))
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">map_longitude</span><span>(</span><span style="color:#bf616a;">lon</span><span>: </span><span style="color:#b48ead;">f32</span><span>) -&gt; Result&lt;</span><span style="color:#b48ead;">f32</span><span>, CoordError&gt; {
+</span><span>    </span><span style="color:#65737e;">// -180 -&gt; 0 maps to 0.0 to 0.5
+</span><span>    </span><span style="color:#65737e;">// 0 -&gt; 180 maps to 0.5 to 1.0
+</span><span>    </span><span style="color:#65737e;">//Ensure longitude is valid
+</span><span>    </span><span style="color:#b48ead;">if </span><span>!(-</span><span style="color:#d08770;">180.0</span><span>..=</span><span style="color:#d08770;">180.0</span><span>).</span><span style="color:#96b5b4;">contains</span><span>(&amp;lon) {
+</span><span>        </span><span style="color:#b48ead;">return </span><span>Err(CoordError {
+</span><span>            msg: &quot;</span><span style="color:#a3be8c;">Invalid longitude: {lon:?}</span><span>&quot;.</span><span style="color:#96b5b4;">to_string</span><span>(),
+</span><span>        });
+</span><span>    }
+</span><span>    </span><span style="color:#b48ead;">if </span><span>(-</span><span style="color:#d08770;">180.0</span><span>..=</span><span style="color:#d08770;">0.0</span><span>).</span><span style="color:#96b5b4;">contains</span><span>(&amp;lon) {
+</span><span>        Ok(</span><span style="color:#96b5b4;">map</span><span>((-</span><span style="color:#d08770;">180.0</span><span>, </span><span style="color:#d08770;">0.0</span><span>), (</span><span style="color:#d08770;">0.0</span><span>, </span><span style="color:#d08770;">0.5</span><span>), lon))
+</span><span>    } </span><span style="color:#b48ead;">else </span><span>{
+</span><span>        Ok(</span><span style="color:#96b5b4;">map</span><span>((</span><span style="color:#d08770;">0.0</span><span>, </span><span style="color:#d08770;">180.0</span><span>), (</span><span style="color:#d08770;">0.5</span><span>, </span><span style="color:#d08770;">1.0</span><span>), lon))
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>Now, the last piece we need to make this coordinate conversion work is the ability to convert Cartesian Coordinates (x, y, z) to Geodetic ones (lat, lon). Assuming the point is normalized, getting these two angles is not difficult.</p>
+<p>For latitude, we need to take the arcsine of the point of our &quot;up&quot; axis, which in bevy is positive Y. For longitude, we need the arctangent of our two &quot;horizontal&quot; axes, X and Z. In rust, that looks like:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">let</span><span> latitude = normalized_point.y.</span><span style="color:#96b5b4;">asin</span><span>();
+</span><span style="color:#b48ead;">let</span><span> longitude = normalized_point.x.</span><span style="color:#96b5b4;">atan2</span><span>(normalized_point.z);
+</span></code></pre>
+<p>This quite easily gets our latitude and longitude in radians. Note that this strategy only works if the GlobalTransform of the sphere is precisely at the origin <code>(0, 0, 0)</code> of our scene. If you want this 
+to work on spheres not at the origin of the scene (or for multiple different spheres) there will be a few extra steps involved.</p>
+<p>I also want some easy ways to convert to degrees, since latitude and longitude aren't typically represented as radians. Fortunately this conversion is simple and not terribly lossy, so lets package all of this (as well as a few helper methods) up into a struct:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span>#[</span><span style="color:#bf616a;">derive</span><span>(Debug)]
+</span><span style="color:#b48ead;">pub struct </span><span>Coordinates {
+</span><span>    </span><span style="color:#65737e;">// Stored internally in radians
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">latitude</span><span>: </span><span style="color:#b48ead;">f32</span><span>,
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">longitude</span><span>: </span><span style="color:#b48ead;">f32</span><span>,
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl </span><span>From&lt;Vec3&gt; </span><span style="color:#b48ead;">for </span><span>Coordinates {
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">from</span><span>(</span><span style="color:#bf616a;">value</span><span>: Vec3) -&gt; </span><span style="color:#b48ead;">Self </span><span>{
+</span><span>        </span><span style="color:#b48ead;">let</span><span> normalized_point = value.</span><span style="color:#96b5b4;">normalize</span><span>();
+</span><span>        </span><span style="color:#b48ead;">let</span><span> latitude = normalized_point.y.</span><span style="color:#96b5b4;">asin</span><span>();
+</span><span>        </span><span style="color:#b48ead;">let</span><span> longitude = normalized_point.x.</span><span style="color:#96b5b4;">atan2</span><span>(normalized_point.z);
+</span><span>        Coordinates {
+</span><span>            latitude,
+</span><span>            longitude,
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl </span><span>Coordinates {
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">as_degrees</span><span>(&amp;</span><span style="color:#bf616a;">self</span><span>) -&gt; (</span><span style="color:#b48ead;">f32</span><span>, </span><span style="color:#b48ead;">f32</span><span>) {
+</span><span>        </span><span style="color:#b48ead;">let</span><span> latitude = </span><span style="color:#bf616a;">self</span><span>.latitude * (</span><span style="color:#d08770;">180.0 </span><span>/ </span><span style="color:#d08770;">PI</span><span>);
+</span><span>        </span><span style="color:#b48ead;">let</span><span> longitude = </span><span style="color:#bf616a;">self</span><span>.longitude * (</span><span style="color:#d08770;">180.0 </span><span>/ </span><span style="color:#d08770;">PI</span><span>);
+</span><span>        (latitude, longitude)
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">convert_to_uv_mercator</span><span>(&amp;</span><span style="color:#bf616a;">self</span><span>) -&gt; (</span><span style="color:#b48ead;">f32</span><span>, </span><span style="color:#b48ead;">f32</span><span>) {
+</span><span>        </span><span style="color:#b48ead;">let </span><span>(lat, lon) = </span><span style="color:#bf616a;">self</span><span>.</span><span style="color:#96b5b4;">as_degrees</span><span>();
+</span><span>        </span><span style="color:#b48ead;">let</span><span> v = </span><span style="color:#96b5b4;">map_latitude</span><span>(lat).</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span>        </span><span style="color:#b48ead;">let</span><span> u = </span><span style="color:#96b5b4;">map_longitude</span><span>(lon).</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span>        (u, v)
+</span><span>    }
+</span><span>
+</span><span>    #[</span><span style="color:#bf616a;">allow</span><span>(dead_code)]
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">from_degrees</span><span>(</span><span style="color:#bf616a;">latitude</span><span>: </span><span style="color:#b48ead;">f32</span><span>, </span><span style="color:#bf616a;">longitude</span><span>: </span><span style="color:#b48ead;">f32</span><span>) -&gt; Result&lt;</span><span style="color:#b48ead;">Self</span><span>, CoordError&gt; {
+</span><span>        </span><span style="color:#b48ead;">if </span><span>!(-</span><span style="color:#d08770;">90.0</span><span>..=</span><span style="color:#d08770;">90.0</span><span>).</span><span style="color:#96b5b4;">contains</span><span>(&amp;latitude) {
+</span><span>            </span><span style="color:#b48ead;">return </span><span>Err(CoordError {
+</span><span>                msg: &quot;</span><span style="color:#a3be8c;">Invalid latitude: {lat:?}</span><span>&quot;.</span><span style="color:#96b5b4;">to_string</span><span>(),
+</span><span>            });
+</span><span>        }
+</span><span>        </span><span style="color:#b48ead;">if </span><span>!(-</span><span style="color:#d08770;">180.0</span><span>..=</span><span style="color:#d08770;">180.0</span><span>).</span><span style="color:#96b5b4;">contains</span><span>(&amp;longitude) {
+</span><span>            </span><span style="color:#b48ead;">return </span><span>Err(CoordError {
+</span><span>                msg: &quot;</span><span style="color:#a3be8c;">Invalid longitude: {lon:?}</span><span>&quot;.</span><span style="color:#96b5b4;">to_string</span><span>(),
+</span><span>            });
+</span><span>        }
+</span><span>        </span><span style="color:#b48ead;">let</span><span> latitude = latitude / (</span><span style="color:#d08770;">180.0 </span><span>/ </span><span style="color:#d08770;">PI</span><span>);
+</span><span>        </span><span style="color:#b48ead;">let</span><span> longitude = longitude / (</span><span style="color:#d08770;">180.0 </span><span>/ </span><span style="color:#d08770;">PI</span><span>);
+</span><span>        Ok(Coordinates {
+</span><span>            latitude,
+</span><span>            longitude,
+</span><span>        })
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">get_point_on_sphere</span><span>(&amp;</span><span style="color:#bf616a;">self</span><span>) -&gt; Vec3 {
+</span><span>        </span><span style="color:#b48ead;">let</span><span> y = </span><span style="color:#bf616a;">self</span><span>.latitude.</span><span style="color:#96b5b4;">sin</span><span>();
+</span><span>        </span><span style="color:#b48ead;">let</span><span> r = </span><span style="color:#bf616a;">self</span><span>.latitude.</span><span style="color:#96b5b4;">cos</span><span>();
+</span><span>        </span><span style="color:#b48ead;">let</span><span> x = </span><span style="color:#bf616a;">self</span><span>.longitude.</span><span style="color:#96b5b4;">sin</span><span>() * -r;
+</span><span>        </span><span style="color:#b48ead;">let</span><span> z = </span><span style="color:#bf616a;">self</span><span>.longitude.</span><span style="color:#96b5b4;">cos</span><span>() * r;
+</span><span>        Vec3::new(x, y, z).</span><span style="color:#96b5b4;">normalize</span><span>() * </span><span style="color:#d08770;">EARTH_RADIUS
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>You might also notice that the <code>convert_to_uv_mercator</code> method calls the mapping functions we made earlier, allowing us to convert between latlon and UV just by calling this method on a point.</p>
+<p>In addition, we have a method <code>get_point_on_sphere</code>:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">get_point_on_sphere</span><span>(&amp;</span><span style="color:#bf616a;">self</span><span>) -&gt; Vec3 {
+</span><span>    </span><span style="color:#b48ead;">let</span><span> y = </span><span style="color:#bf616a;">self</span><span>.latitude.</span><span style="color:#96b5b4;">sin</span><span>();
+</span><span>    </span><span style="color:#b48ead;">let</span><span> r = </span><span style="color:#bf616a;">self</span><span>.latitude.</span><span style="color:#96b5b4;">cos</span><span>();
+</span><span>    </span><span style="color:#b48ead;">let</span><span> x = </span><span style="color:#bf616a;">self</span><span>.longitude.</span><span style="color:#96b5b4;">sin</span><span>() * -r;
+</span><span>    </span><span style="color:#b48ead;">let</span><span> z = </span><span style="color:#bf616a;">self</span><span>.longitude.</span><span style="color:#96b5b4;">cos</span><span>() * r;
+</span><span>    Vec3::new(x, y, z).</span><span style="color:#96b5b4;">normalize</span><span>() * </span><span style="color:#d08770;">EARTH_RADIUS
+</span><span>}
+</span></code></pre>
+<p>This allows us to convert in the other direction, and get a point on the sphere from Geodetic coordinates. This would be useful if you want to spawn an object at a given latlon.</p>
+<h2 id="setting-uv-coordinates">Setting UV Coordinates</h2>
+<p>Now that we have a means to get a UV coordinate for each vertex in our mesh, we need to actually assign them. So lets take a look at a new version of our <code>generate_face</code> function:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">generate_face</span><span>(
+</span><span>    </span><span style="color:#bf616a;">normal</span><span>: Vec3,
+</span><span>    </span><span style="color:#bf616a;">resolution</span><span>: </span><span style="color:#b48ead;">u32</span><span>,
+</span><span>    </span><span style="color:#bf616a;">x_offset</span><span>: </span><span style="color:#b48ead;">f32</span><span>,
+</span><span>    </span><span style="color:#bf616a;">y_offset</span><span>: </span><span style="color:#b48ead;">f32</span><span>,
+</span><span>) -&gt; Mesh {
+</span><span>    </span><span style="color:#b48ead;">let</span><span> axis_a = Vec3::new(normal.y, normal.z, normal.x); </span><span style="color:#65737e;">// Horizontal
+</span><span>    </span><span style="color:#b48ead;">let</span><span> axis_b = axis_a.</span><span style="color:#96b5b4;">cross</span><span>(normal); </span><span style="color:#65737e;">// Vertical
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> verticies: Vec&lt;Vec3&gt; = Vec::new();
+</span><span>
+</span><span style="color:#65737e;">// Create a new vec containing our uv coords
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> uvs = Vec::new();
+</span><span>	
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> indicies: Vec&lt;</span><span style="color:#b48ead;">u32</span><span>&gt; = Vec::new();
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> normals = Vec::new();
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> first_longitude = </span><span style="color:#d08770;">0.0</span><span>;
+</span><span>    </span><span style="color:#b48ead;">for</span><span> y in </span><span style="color:#d08770;">0</span><span>..(resolution) {
+</span><span>        </span><span style="color:#b48ead;">for</span><span> x in </span><span style="color:#d08770;">0</span><span>..(resolution) {
+</span><span>            </span><span style="color:#b48ead;">let</span><span> i = x + y * resolution;
+</span><span>
+</span><span>            </span><span style="color:#b48ead;">let</span><span> percent = Vec2::new(x as </span><span style="color:#b48ead;">f32</span><span>, y as </span><span style="color:#b48ead;">f32</span><span>) / (resolution - </span><span style="color:#d08770;">1</span><span>) as </span><span style="color:#b48ead;">f32</span><span>;
+</span><span>            </span><span style="color:#b48ead;">let</span><span> point_on_unit_cube =
+</span><span>                normal + (percent.x - x_offset) * axis_a + (percent.y - y_offset) * axis_b;
+</span><span>	</span><span style="color:#65737e;">// Convert our point_coords into `Coordinates`
+</span><span>            </span><span style="color:#b48ead;">let</span><span> point_coords: Coordinates = point_on_unit_cube.</span><span style="color:#96b5b4;">normalize</span><span>().</span><span style="color:#96b5b4;">into</span><span>();
+</span><span>            </span><span style="color:#b48ead;">let</span><span> normalized_point = point_on_unit_cube.</span><span style="color:#96b5b4;">normalize</span><span>() * </span><span style="color:#d08770;">EARTH_RADIUS</span><span>;
+</span><span>            verticies.</span><span style="color:#96b5b4;">push</span><span>(normalized_point);
+</span><span>	</span><span style="color:#65737e;">// Get the UV Coordinates of our point
+</span><span>            </span><span style="color:#b48ead;">let </span><span>(</span><span style="color:#b48ead;">mut</span><span> u, </span><span style="color:#b48ead;">mut</span><span> v) = point_coords.</span><span style="color:#96b5b4;">convert_to_uv_mercator</span><span>();
+</span><span>
+</span><span>	</span><span style="color:#65737e;">// Some special case logic
+</span><span>            </span><span style="color:#b48ead;">if</span><span> y == </span><span style="color:#d08770;">0 </span><span>&amp;&amp; x == </span><span style="color:#d08770;">0 </span><span>{
+</span><span>                first_longitude = lon;
+</span><span>            }
+</span><span>	</span><span style="color:#65737e;">// In the middle latitudes, if we start on a 
+</span><span>	</span><span style="color:#65737e;">// negative longitude but then wind up crossing to a 
+</span><span>	</span><span style="color:#65737e;">// positive longitude, set u to 0.0 to prevent a seam
+</span><span>            </span><span style="color:#b48ead;">if</span><span> first_longitude &lt; </span><span style="color:#d08770;">0.0 </span><span>&amp;&amp; lon &gt; </span><span style="color:#d08770;">0.0 </span><span>&amp;&amp; lat &lt; </span><span style="color:#d08770;">89.0 </span><span>&amp;&amp; lat &gt; -</span><span style="color:#d08770;">89.0 </span><span>{
+</span><span>                u = </span><span style="color:#d08770;">0.0</span><span>;
+</span><span>            }
+</span><span>	</span><span style="color:#65737e;">// If we are below -40 degrees latitude and the tile 
+</span><span>	</span><span style="color:#65737e;">// starts at 180 degrees, set u to 0.0 to prevent a seam
+</span><span>            </span><span style="color:#b48ead;">if</span><span> x == </span><span style="color:#d08770;">0 </span><span>&amp;&amp; lon == </span><span style="color:#d08770;">180.0 </span><span>&amp;&amp; lat &lt; -</span><span style="color:#d08770;">40.0 </span><span>{
+</span><span>                u = </span><span style="color:#d08770;">0.0</span><span>;
+</span><span>            }
+</span><span>	</span><span style="color:#65737e;">// Push the UV Coordinates into the vec
+</span><span>            uvs.</span><span style="color:#96b5b4;">push</span><span>([u, v]);
+</span><span>            normals.</span><span style="color:#96b5b4;">push</span><span>(-point_on_unit_cube.</span><span style="color:#96b5b4;">normalize</span><span>());
+</span><span>
+</span><span>            </span><span style="color:#b48ead;">if</span><span> x != resolution - </span><span style="color:#d08770;">1 </span><span>&amp;&amp; y != resolution - </span><span style="color:#d08770;">1 </span><span>{
+</span><span>                </span><span style="color:#65737e;">// First triangle
+</span><span>                indicies.</span><span style="color:#96b5b4;">push</span><span>(i);
+</span><span>                indicies.</span><span style="color:#96b5b4;">push</span><span>(i + resolution);
+</span><span>                indicies.</span><span style="color:#96b5b4;">push</span><span>(i + resolution + </span><span style="color:#d08770;">1</span><span>);
+</span><span>
+</span><span>                </span><span style="color:#65737e;">// Second triangle
+</span><span>                indicies.</span><span style="color:#96b5b4;">push</span><span>(i);
+</span><span>                indicies.</span><span style="color:#96b5b4;">push</span><span>(i + resolution + </span><span style="color:#d08770;">1</span><span>);
+</span><span>                indicies.</span><span style="color:#96b5b4;">push</span><span>(i + </span><span style="color:#d08770;">1</span><span>);
+</span><span>            }
+</span><span>        }
+</span><span>    }
+</span><span>    </span><span style="color:#b48ead;">let</span><span> indicies = mesh::Indices::</span><span style="color:#d08770;">U32</span><span>(indicies);
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> mesh = Mesh::new(PrimitiveTopology::TriangleList);
+</span><span>    mesh.</span><span style="color:#96b5b4;">set_indices</span><span>(Some(indicies));
+</span><span>    mesh.</span><span style="color:#96b5b4;">insert_attribute</span><span>(Mesh::</span><span style="color:#d08770;">ATTRIBUTE_POSITION</span><span>, verticies);
+</span><span>    mesh.</span><span style="color:#96b5b4;">insert_attribute</span><span>(Mesh::</span><span style="color:#d08770;">ATTRIBUTE_NORMAL</span><span>, normals);
+</span><span>	</span><span style="color:#65737e;">// Insert the UV attribute along with our uv vec
+</span><span>    mesh.</span><span style="color:#96b5b4;">insert_attribute</span><span>(Mesh::</span><span style="color:#d08770;">ATTRIBUTE_UV_0</span><span>, uvs);
+</span><span>    mesh.</span><span style="color:#96b5b4;">generate_tangents</span><span>().</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span>    mesh
+</span><span>}
+</span></code></pre>
+<p>You are probably wondering what is up with this bit specifically:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span>	</span><span style="color:#65737e;">// Some special case logic
+</span><span>            </span><span style="color:#b48ead;">if</span><span> y == </span><span style="color:#d08770;">0 </span><span>&amp;&amp; x == </span><span style="color:#d08770;">0 </span><span>{
+</span><span>                first_longitude = lon;
+</span><span>            }
+</span><span>	</span><span style="color:#65737e;">// In the middle latitudes, if we start on a 
+</span><span>	</span><span style="color:#65737e;">// negative longitude but then wind up crossing to a 
+</span><span>	</span><span style="color:#65737e;">// positive longitude, set u to 0.0 to prevent a seam
+</span><span>            </span><span style="color:#b48ead;">if</span><span> first_longitude &lt; </span><span style="color:#d08770;">0.0 </span><span>&amp;&amp; lon &gt; </span><span style="color:#d08770;">0.0 </span><span>&amp;&amp; lat &lt; </span><span style="color:#d08770;">89.0 </span><span>&amp;&amp; lat &gt; -</span><span style="color:#d08770;">89.0 </span><span>{
+</span><span>                u = </span><span style="color:#d08770;">0.0</span><span>;
+</span><span>            }
+</span><span>	</span><span style="color:#65737e;">// If we are below -40 degrees latitude and the tile 
+</span><span>	</span><span style="color:#65737e;">// starts at 180 degrees, set u to 0.0 to prevent a seam
+</span><span>            </span><span style="color:#b48ead;">if</span><span> x == </span><span style="color:#d08770;">0 </span><span>&amp;&amp; lon == </span><span style="color:#d08770;">180.0 </span><span>&amp;&amp; lat &lt; -</span><span style="color:#d08770;">40.0 </span><span>{
+</span><span>                u = </span><span style="color:#d08770;">0.0</span><span>;
+</span><span>            }
+</span></code></pre>
+<p>This is a section that is needed to prevent seams where the UV coordinates go in the wrong direction. Since the coordinates near the prime meridian go from 
+1 to 0 in the space of one vertex, the entire texture is re-projected backwards on the faces leading up to the prime meridian. There are a few ways to fix this, namely offsetting
+your vertexes so that they are <em>exactly</em> aligned with the prime meridian, but I decided to just clamp the values close to both the prime meridian and the poles to prevent the seams from occurring.</p>
+<p>And, just to test that everything is working properly, lets go ahead and assign it an <a href="https://www.google.com/search?client=firefox-b-1-d&amp;q=uv+test+texture">uv test texture</a> of your choice.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">generate_faces</span><span>(
+</span><span>    </span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">commands</span><span>: Commands,
+</span><span>    </span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">meshes</span><span>: ResMut&lt;Assets&lt;Mesh&gt;&gt;,
+</span><span>    </span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">materials</span><span>: ResMut&lt;Assets&lt;StandardMaterial&gt;&gt;,
+</span><span>    </span><span style="color:#bf616a;">asset_server</span><span>: Res&lt;AssetServer&gt;,
+</span><span>) {
+</span><span>    </span><span style="color:#b48ead;">let</span><span> faces = vec![
+</span><span>        Vec3::X,
+</span><span>        Vec3::</span><span style="color:#d08770;">NEG_X</span><span>,
+</span><span>        Vec3::Y,
+</span><span>        Vec3::</span><span style="color:#d08770;">NEG_Y</span><span>,
+</span><span>        Vec3::Z,
+</span><span>        Vec3::</span><span style="color:#d08770;">NEG_Z</span><span>,
+</span><span>    ];
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">let</span><span> offsets = vec![(</span><span style="color:#d08770;">0.0</span><span>, </span><span style="color:#d08770;">0.0</span><span>), (</span><span style="color:#d08770;">0.0</span><span>, </span><span style="color:#d08770;">1.0</span><span>), (</span><span style="color:#d08770;">1.0</span><span>, </span><span style="color:#d08770;">0.0</span><span>), (</span><span style="color:#d08770;">1.0</span><span>, </span><span style="color:#d08770;">1.0</span><span>)];
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> rng = rand::thread_rng();
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">for</span><span> direction in faces {
+</span><span>        </span><span style="color:#b48ead;">for</span><span> offset in &amp;offsets {
+</span><span>            commands.</span><span style="color:#96b5b4;">spawn</span><span>((
+</span><span>                PbrBundle {
+</span><span>                    mesh: meshes.</span><span style="color:#96b5b4;">add</span><span>(</span><span style="color:#96b5b4;">generate_face</span><span>(direction, </span><span style="color:#d08770;">100</span><span>, offset.</span><span style="color:#d08770;">0</span><span>, offset.</span><span style="color:#d08770;">1</span><span>)),
+</span><span>                    material: materials.</span><span style="color:#96b5b4;">add</span><span>(StandardMaterial {
+</span><span>                        base_color_texture: Some(
+</span><span>                            asset_server.</span><span style="color:#96b5b4;">load</span><span>(&quot;</span><span style="color:#a3be8c;">WorldTextures/uv_test_texture.png</span><span>&quot;),
+</span><span>                        ),
+</span><span>                        ..</span><span style="color:#96b5b4;">default</span><span>()
+</span><span>                    }),
+</span><span>                    ..</span><span style="color:#96b5b4;">default</span><span>()
+</span><span>                },
+</span><span>                PickableBundle::default(), </span><span style="color:#65737e;">// Makes the entity pickable
+</span><span>                RaycastPickTarget::default(),
+</span><span>                On::&lt;Pointer&lt;Click&gt;&gt;::run(|</span><span style="color:#bf616a;">event</span><span>: Listener&lt;Pointer&lt;Click&gt;&gt;| {
+</span><span>                    info!(&quot;</span><span style="color:#a3be8c;">Clicked on entity {:?}</span><span>&quot;, event);
+</span><span>                    </span><span style="color:#b48ead;">let</span><span> hit = event.hit;
+</span><span>                    </span><span style="color:#b48ead;">if let </span><span>Some(pos) = hit.position {
+</span><span>                        </span><span style="color:#b48ead;">let</span><span> coords: Coordinates = pos.</span><span style="color:#96b5b4;">into</span><span>();
+</span><span>                        </span><span style="color:#b48ead;">let </span><span>(latitude, longitude) = coords.</span><span style="color:#96b5b4;">as_degrees</span><span>();
+</span><span>                        info!(
+</span><span>                            &quot;</span><span style="color:#a3be8c;">Latlon of selected point: Lat: {}, Lon: {}</span><span>&quot;,
+</span><span>                            latitude, longitude
+</span><span>                        );
+</span><span>                    }
+</span><span>                }),
+</span><span>            ));
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>While we were messing with that function, I also used the wonderful <a href="https://github.com/aevyrie/bevy_mod_picking">bevy picking module</a> to give us a chance to look at/debug our coordinate generation if it isn't working correctly. Now when you click on the sphere, you should get a log message emitted with the latitude and longitude coordinates.</p>
+<p>So, lets fire it up and see what happens:</p>
+<video controls width=100%>
+<source src="../../videos/sphere.webm" />
+</video>
+<p>Which looks pretty good!</p>
+<p>And when you click on the globe, you get this lovely log message:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>2023-10-20T19:14:05.861205Z  INFO surface_action::map: Latlon of selected point: Lat: 29.734213, Lon: -95.40474
+</span></code></pre>
+<p>So now that all of that is out of the way, lets make it look like an actual earth.</p>
+<h2 id="textures">Textures</h2>
+<p>Head over to <a href="https://visibleearth.nasa.gov/collection/1484/blue-marble?page=2">Visible Earth</a> and download the texture package for the month of your choice. Use the highest resolution one if possible for maximum pretty. But if you get a WGPU error when compiling, try a lower resolution (you may also have to resample them in GIMP or another program if you are running on a computer without a discrete GPU.)</p>
+<p>It should look something like this:</p>
+<img src="../../images/bevy_proc_earth_earth_color.jpg" alt="Earth color texture." />
+<p>Next, we will add a metallic roughness texture. This may be a bit confusing, because we aren't creating a metallic object, but we are going to use this channel to differentiate between the reflectivity of land versus the ocean. As a result, I've taken one of NASAs specular maps and inverted it (you can download and invert it yourself from NASAs website, or just save the image below):</p>
+<img src="../../images/specular_map_inverted_8k.png" alt="Specular map of the earth." />
+<p>And finally for our normal channel, we have a 21k resolution topography map.</p>
+<img src="../../images/topography_21K.png" alt="Topographicl map of the earth." />
+<p>Since these images all use the same projection, the same UV coordinates will suffice for all of them. As a result, the only thing left to do is add them to our PBR material in the <code>generate_faces</code> function:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span>PbrBundle {
+</span><span>	mesh: meshes.</span><span style="color:#96b5b4;">add</span><span>(</span><span style="color:#96b5b4;">generate_face</span><span>(direction, </span><span style="color:#d08770;">800</span><span>, offset.</span><span style="color:#d08770;">0</span><span>, offset.</span><span style="color:#d08770;">1</span><span>, &amp;rs)),
+</span><span>	material: materials.</span><span style="color:#96b5b4;">add</span><span>(StandardMaterial {
+</span><span>		base_color_texture: Some(
+</span><span>			asset_server.</span><span style="color:#96b5b4;">load</span><span>(&quot;</span><span style="color:#a3be8c;">WorldTextures/world_shaded_32k.png</span><span>&quot;),
+</span><span>		),
+</span><span>		metallic_roughness_texture: Some(
+</span><span>			asset_server.</span><span style="color:#96b5b4;">load</span><span>(&quot;</span><span style="color:#a3be8c;">WorldTextures/specular_map_inverted_8k.png</span><span>&quot;),
+</span><span>		),
+</span><span>		perceptual_roughness: </span><span style="color:#d08770;">1.0</span><span>,
+</span><span>		normal_map_texture: Some(
+</span><span>			asset_server.</span><span style="color:#96b5b4;">load</span><span>(&quot;</span><span style="color:#a3be8c;">WorldTextures/topography_21K.png</span><span>&quot;),
+</span><span>		),
+</span><span>		..</span><span style="color:#96b5b4;">default</span><span>()
+</span><span>	}),
+</span><span>	..</span><span style="color:#96b5b4;">default</span><span>()
+</span><span>},
+</span></code></pre>
+<p>And the results should be a textured Earth:</p>
+<video controls width=100%>
+<source src="../../videos/spinny_earth.webm" />
+</video>
+<p>Next time we are going to use some GIS real world elevation data to deform the mesh into an exaggerated height model of the earth.</p>
+<div class="footnote-definition" id="1"><sup class="footnote-definition-label">1</sup>
+<p>Please don't actually do this if you are going into a GIS career though.</p>
+</div>
+
+        </section>
+
+        
+            <div class="post-tags">
+                <nav class="nav tags">
+                    <ul class="tags">
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/rust/>Rust</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/bevy/>Bevy</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/gamedev/>Gamedev</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/procedural-mesh/>Procedural Mesh</a></li>
+                        
+                    </ul>
+                </nav>
+            </div>
+        
+
+    </article>
+</main>
+
+
+
+        <footer>
+	<div style="display:flex">
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;github.com&#x2F;graysonhead title=GitHub>
+	         <i data-feather=github></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;hachyderm.io&#x2F;@Darkside title=Mastadon>
+	         <i data-feather=globe></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;www.linkedin.com&#x2F;in&#x2F;graysonhead&#x2F; title=LinkedIn>
+	         <i data-feather=linkedin></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;pixel.tchncs.de&#x2F;i&#x2F;web title=PixelFed>
+	         <i data-feather=camera></i>
+	     </a>
+	 
+	 </div>
+	 <div class="footer-info">
+	 2026 © Grayson Head
+        </div>
+</footer>
+
+
+<script>
+	    feather.replace();
+</script>
+
+
+    </div>
+</body>
+
+</html>

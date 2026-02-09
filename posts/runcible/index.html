@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+
+    
+    <title>
+         Runcible: Declarative Network Automation
+        
+    </title>
+
+    
+    <meta property="og:title"
+        content="Runcible: Declarative Network Automation" />
+    
+    
+
+    
+    
+    
+
+    
+    
+    
+
+    
+
+    
+
+    
+
+    
+    
+    <script src=https://blog.graysonhead.net/js/feather.min.js></script>
+    
+
+
+    
+    <link href=https://blog.graysonhead.net/css/fonts.css rel="stylesheet" />
+    
+
+    <link rel="stylesheet" type="text/css" media="screen" href=https://blog.graysonhead.net/css/main.css />
+
+    
+    <link rel="stylesheet" id="darkModeStyle" type="text/css" href=https://blog.graysonhead.net/css/dark.css   />
+    
+
+
+    
+
+
+</head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-CCTJX63WS9"></script>
+<script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    gtag('js', new Date());
+
+    gtag('config', 'G-CCTJX63WS9');
+</script>
+
+<body>
+    <div class="content">
+        <header>
+    <div class="main" id="main_title">
+        <a href=https:&#x2F;&#x2F;blog.graysonhead.net></a>
+    </div>
+
+    <nav>
+        
+            <a href=&#x2F;posts>&#x2F;posts</a>
+        
+            <a href=&#x2F;projects>&#x2F;projects</a>
+        
+            <a href=&#x2F;about>&#x2F;about</a>
+        
+
+        
+            |
+
+            
+                <a href=&#x2F;>en</a>
+            
+        
+
+        
+    </nav>
+</header>
+
+
+        
+    
+<main>
+    <article>
+        <div class="title">
+            <h1 class="title">Runcible: Declarative Network Automation</h1>
+            <div class="meta">
+                
+                on  2019-05-12
+
+                
+            </div>
+        </div>
+
+        
+
+        <section class="body">
+            <p>I’m probably better with systems than networks. I’ve got a decent grasp of Networking concepts, but I’ve not worked in large scale environments as a network engineer. I architect-ed the network for a few small (&lt;50 rack) datacenters that were adequate, played with a lot of Linux powered switches, and did a fair bit of edge design with BGP.</p>
+<p>On the other hand, as a systems guy I’ve worked in two notable large scale environments at this point, both of which are in the top 500 website list globally according to Alexa (the website statistics service, not the lady-tube). As well as countless smaller, but still pretty large environments. In these environments, some kind of config management for physical infrastructure is absolutely not optional; and can be the difference between being able to scale or being crushed under your own weight. As a result, I’ve developed some strong opinions about configuration management from a user’s perspective.</p>
+<p>A while back, I found myself in the position to manage a network again after doing large-scale systems work for a bit, and came to a realization: Open source declarative network automation tools don’t exist.</p>
+<p>Now, I know you can use Ansible, Chef, Puppet, and Salt to do a lot of network automation. And I’ve used Ansible and Salt to manage a mixed Juniper/Cumulus environment on several occasions. But trust me when I say the tools aren’t designed to manage networks, they were adapted to it. And if you are a network engineer that hasn’t spent any time on the other side of the fence, you probably don’t know what you are missing out on.</p>
+<h1 id="the-first-problem-commonality-a-dependency-for-dry-declarations">The First Problem: Commonality (A Dependency for Dry Declarations)</h1>
+<p>The rule of DRY (Don’t Repeat Yourself) exists for your sanity, and also the longevity of your keyboard. Every programmer lives and dies by DRY. And good configuration management languages should embrace it as well.</p>
+<p>But with existing tools, you don’t really get it. At least not for network hardware.</p>
+<p>Almost all of the major config automation suites support some kind of hierarchical hash/dict deep merge. For those unfamiliar with the concept, it goes something like this.</p>
+<pre data-lang="yaml" style="background-color:#2b303b;color:#c0c5ce;" class="language-yaml "><code class="language-yaml" data-lang="yaml"><span style="color:#bf616a;">layers</span><span>:
+</span><span>  - </span><span style="color:#a3be8c;">country
+</span><span>  - </span><span style="color:#bf616a;">statecountry</span><span>:
+</span><span>  - </span><span style="color:#bf616a;">name</span><span>: </span><span style="color:#a3be8c;">USA
+</span><span>    </span><span style="color:#bf616a;">national_bird</span><span>: </span><span style="color:#a3be8c;">Bald Eagle
+</span><span>    </span><span style="color:#bf616a;">national_mammal</span><span>: </span><span style="color:#a3be8c;">Bison
+</span><span>    </span><span style="color:#bf616a;">national_flower</span><span>: </span><span style="color:#a3be8c;">Rose
+</span><span>    </span><span style="color:#bf616a;">national_tree</span><span>: </span><span style="color:#bf616a;">Oak Treestate</span><span>:
+</span><span>  - </span><span style="color:#bf616a;">name</span><span>: </span><span style="color:#a3be8c;">Texas
+</span><span>    </span><span style="color:#bf616a;">state_flower</span><span>: </span><span style="color:#a3be8c;">BlueBonnet
+</span><span>  - </span><span style="color:#bf616a;">name</span><span>: </span><span style="color:#a3be8c;">Utah
+</span><span>    </span><span style="color:#bf616a;">state_flower</span><span>: </span><span style="color:#a3be8c;">Sego Lilydeep_merge(country.USA, state.Texas)
+</span><span style="color:#bf616a;">national_bird</span><span>: </span><span style="color:#a3be8c;">Bald Eagle
+</span><span style="color:#bf616a;">national_mammal</span><span>: </span><span style="color:#a3be8c;">Bison
+</span><span style="color:#bf616a;">national_flower</span><span>: </span><span style="color:#a3be8c;">Rose
+</span><span style="color:#bf616a;">national_tree</span><span>: </span><span style="color:#a3be8c;">Oak Tree
+</span><span style="color:#bf616a;">state_flower</span><span>: </span><span style="color:#a3be8c;">BlueBonnetdeep_merge(country.USA, state.Utah)
+</span><span style="color:#bf616a;">national_bird</span><span>: </span><span style="color:#a3be8c;">Bald Eagle
+</span><span style="color:#bf616a;">national_mammal</span><span>: </span><span style="color:#a3be8c;">Bison
+</span><span style="color:#bf616a;">national_flower</span><span>: </span><span style="color:#a3be8c;">Rose
+</span><span style="color:#bf616a;">national_tree</span><span>: </span><span style="color:#a3be8c;">Oak Tree
+</span><span style="color:#bf616a;">state_flower</span><span>: </span><span style="color:#a3be8c;">Sego Lily
+</span></code></pre>
+<p>If you didn’t have deep merge available, you would have to define each entry like this:</p>
+<pre data-lang="yaml" style="background-color:#2b303b;color:#c0c5ce;" class="language-yaml "><code class="language-yaml" data-lang="yaml"><span style="color:#bf616a;">item1</span><span>: 
+</span><span> </span><span style="color:#bf616a;">state_name</span><span>: </span><span style="color:#a3be8c;">Texas
+</span><span> </span><span style="color:#bf616a;">national_bird</span><span>: </span><span style="color:#a3be8c;">Bald Eagle
+</span><span> </span><span style="color:#bf616a;">national_mammal</span><span>: </span><span style="color:#a3be8c;">Bison
+</span><span> </span><span style="color:#bf616a;">national_flower</span><span>: </span><span style="color:#a3be8c;">Rose
+</span><span> </span><span style="color:#bf616a;">national_tree</span><span>: </span><span style="color:#a3be8c;">Oak Tree
+</span><span> </span><span style="color:#bf616a;">state_flower</span><span>: </span><span style="color:#a3be8c;">BlueBonnet
+</span><span> </span><span style="color:#bf616a;">country_name</span><span>: </span><span style="color:#bf616a;">USAitem2</span><span>:
+</span><span> </span><span style="color:#bf616a;">state_name</span><span>: </span><span style="color:#a3be8c;">Utah
+</span><span> </span><span style="color:#bf616a;">national_bird</span><span>: </span><span style="color:#a3be8c;">Bald Eagle
+</span><span> </span><span style="color:#bf616a;">national_mammal</span><span>: </span><span style="color:#a3be8c;">Bison
+</span><span> </span><span style="color:#bf616a;">national_flower</span><span>: </span><span style="color:#a3be8c;">Rose
+</span><span> </span><span style="color:#bf616a;">national_tree</span><span>: </span><span style="color:#a3be8c;">Oak Tree
+</span><span> </span><span style="color:#bf616a;">state_flower</span><span>: </span><span style="color:#a3be8c;">Sego Lily
+</span><span> </span><span style="color:#bf616a;">country_name</span><span>: </span><span style="color:#a3be8c;">USA
+</span></code></pre>
+<p>We saved 2 lines of defining by having an inheritance structure, and you can probably tell that the more attributes we define at the country level, the more savings we have.</p>
+<p>Merging can save you a lot of pain and boilerplate, especially when you have different servers in different locations with different configurations, but they still share things in common (like what they do, and how the software gets installed.) For servers, the OS serves as an adequate abstraction layer to smooth out hardware differences.</p>
+<p>The problem is, no one has the same kind of network hardware at the end of the day, and in a lot of cases you may not even be able to run the same kind of network operating system in two different datacenters, or often, in the same datacenter. If you have an extremely homogeneous environment, you might not notice this problem, but chances are better that you don’t. And even if you do now, you won’t in the future when you inevitably switch platforms.</p>
+<p>Using Ansible as an example, lets look at two different configuration snippets:</p>
+<pre data-lang="yaml" style="background-color:#2b303b;color:#c0c5ce;" class="language-yaml "><code class="language-yaml" data-lang="yaml"><span style="color:#bf616a;">Juniper:- name</span><span>: </span><span style="color:#a3be8c;">Configure interface in access mode
+</span><span>  </span><span style="color:#bf616a;">junos_l2_interface</span><span>:
+</span><span>    </span><span style="color:#bf616a;">name</span><span>: </span><span style="color:#a3be8c;">ge-0/0/1
+</span><span>    </span><span style="color:#bf616a;">description</span><span>: </span><span style="color:#a3be8c;">interface-access
+</span><span>    </span><span style="color:#bf616a;">mode</span><span>: </span><span style="color:#a3be8c;">access
+</span><span>    </span><span style="color:#bf616a;">access_vlan</span><span>: </span><span style="color:#d08770;">2
+</span><span>    </span><span style="color:#bf616a;">active</span><span>: </span><span style="color:#d08770;">True
+</span><span>    </span><span style="color:#bf616a;">state</span><span>: </span><span style="color:#bf616a;">presentCumulus:- name</span><span>: </span><span style="color:#a3be8c;">Add an access interface on swp1
+</span><span>  </span><span style="color:#bf616a;">nclu</span><span>:
+</span><span>    </span><span style="color:#bf616a;">commands</span><span>:
+</span><span>      - </span><span style="color:#a3be8c;">add int swp1
+</span><span>      - </span><span style="color:#a3be8c;">add int swp1 bridge access 2
+</span></code></pre>
+<p>Both of these configurations do the exact same thing, but as you can see, there is no commonality between them whatsoever. As a result, you can’t have an inheritance structure, which means any changes made to one environment have to be translated by a human and inserted into the other(s). This completely breaks the principle of inheritance.</p>
+<p>Moreover, there is no commonality between different types of network hardware (with Juniper being a partial exception to this). Your Cisco Routers and Palo Alto firewalls don’t benefit from the extensive and labeled VLAN dictionary that you use to drive your switch configurations, so you have to repeat information even more.</p>
+<h1 id="the-second-problem-topology-is-a-thing">The Second Problem: Topology is a Thing</h1>
+<p>Topology isn’t a very important concept in server automation. Things need to be grouped, and you definitely want to keep a few of your application nodes untouched as you upgrade the others. In a lot of cases, you can define a sort of dependency hierarchy, but this doesn’t quite cut it for a network. Networks are all about topology, and trying to pretend like it isn’t important when running automation is a path to ruin.</p>
+<p>Take the following simple topology:</p>
+<img src="../images/runcible1.png" alt="Image of a switch topography depicting an expanded spine with 6 spine switches and 8 leaf switches. The spine swithces are labeled as group 1, and the leaf switches group 2" />
+<p>Group 1 is the role <code>core_switches</code>, and Group 2 is the role <code>rack_switches</code>.</p>
+<p>All configuration management suites will give you the option to do a rolling upgrade within a group, which has a high probability of not working in this example. If you are running your operations idempotently, it may not cause a problem, but if you are making a data-center-wide change to your network environment that requires a restart of interfaces; the random choices your automation will make in this case could shoot you in the foot.</p>
+<p>If you allow it to run two concurrent applies, and it picks the two middlemost core switches, you’ve just split-brained your datacenter. Or, slightly less worse, it might do a simultaneous apply on both of the switches in a rack, taking the rack down.</p>
+<p>The current way to fix this? Just only run against one device within a role at any given time. The problem with this? Some datacenters have a LOT of network devices, as there are only so many hours in the day…</p>
+<p>Good network automation tools need to be aware of concepts like adjacency, clustering link aggregation, and pathing. Otherwise you are stuck automating things at a snails pace, or performing dangerous actions.</p>
+<h1 id="the-third-problem-bootstrapping">The Third Problem: Bootstrapping</h1>
+<p>Lets assume you have a completely homogeneous environment, and you have managed to solve the topology problem mentioned above. If you wind up having to deploy 30 racks, what does your deployment workflow look like? For servers, there is generally a middleman (generally PXE based) that deals with the initial provisioning of a system, and getting it “up enough” into a state where provisioning can be taken over by another system. But many switch ecosystems don’t have this.</p>
+<p>What usually happens is that a network engineer will connect a serial cable to a switch, and manually configure it’s management interface to be reachable over SSH or another protocol, then your config management software takes over. More rarely, your ecosystem will support some kind of “phone home” DNS address that can be used to phone home to a server and fetch a configuration file. But for consultants working in smaller environments, this is a non-starter, as that infrastructure doesn’t exist yet (that is what they are in the process of creating.) Also, that infrastructure can’t exist until the network does, so it makes little sense for provisioning network devices.</p>
+<p>All of this combines to make the process of bootstrapping switches specifically (but also a horde of other network devices) a royal pain, and often a more annoying task than provisioning a far greater number of servers.</p>
+<h1 id="what-is-runcible">What is Runcible?</h1>
+<p>Runcible is a Framework and Command Line Application written in python to provide a declarative abstraction layer for configuring network devices. Put simply, it takes a desired state of a set of network appliances (that the user specifies), compares it to the current state of those appliances, and then determines all of the commands that need to be run to correct the differences idempotently. Due to it’s preference for operating on the command-line by default (you can also write plugins that interact with REST APIs), you can utilize the same plugins to configure devices over SSH, Telnet, RS-232, or any text-based CLI.</p>
+<h1 id="how-does-it-fix-those-problems">How Does it Fix Those Problems?</h1>
+<h2 id="modular-interfaces">Modular Interfaces</h2>
+<p>Network devices generally need to comply with networking standards, and Runcible takes advantage of the resultant similarities and provides abstraction layers that can be re-used on multiple different platforms with minimal modification.</p>
+<p>As an example, here is a Runcible switch definition for a Cumulus switch in YAML:</p>
+<pre data-lang="yaml" style="background-color:#2b303b;color:#c0c5ce;" class="language-yaml "><code class="language-yaml" data-lang="yaml"><span style="color:#bf616a;">meta</span><span>: </span><span style="color:#65737e;"># &lt;- Meta module
+</span><span>  </span><span style="color:#bf616a;">device</span><span>:
+</span><span>    </span><span style="color:#bf616a;">ssh</span><span>:
+</span><span>      </span><span style="color:#bf616a;">hostname</span><span>: </span><span style="color:#a3be8c;">switch1.oob.domain.net
+</span><span>      </span><span style="color:#bf616a;">username</span><span>: </span><span style="color:#a3be8c;">cumulus
+</span><span>    </span><span style="color:#bf616a;">default_management_protocol</span><span>: </span><span style="color:#a3be8c;">ssh
+</span><span>    </span><span style="color:#bf616a;">driver</span><span>: </span><span style="color:#a3be8c;">cumulus
+</span><span style="color:#bf616a;">system</span><span>: </span><span style="color:#65737e;"># &lt;- Module
+</span><span>  </span><span style="color:#bf616a;">hostname</span><span>: </span><span style="color:#a3be8c;">switch1.inf.domain.net </span><span style="color:#65737e;"># &lt;- Attribute
+</span><span style="color:#bf616a;">interfaces</span><span>: </span><span style="color:#65737e;"># &lt;- Module
+</span><span>  - </span><span style="color:#bf616a;">name</span><span>: </span><span style="color:#a3be8c;">swp1 </span><span style="color:#65737e;"># &lt;- Sub-module /attribute
+</span><span>    </span><span style="color:#bf616a;">pvid</span><span>: </span><span style="color:#d08770;">22
+</span><span>    </span><span style="color:#bf616a;">bpduguard</span><span>: </span><span style="color:#d08770;">False
+</span><span>  - </span><span style="color:#bf616a;">name</span><span>: </span><span style="color:#a3be8c;">swp2
+</span><span>    </span><span style="color:#bf616a;">pvid</span><span>: </span><span style="color:#d08770;">23
+</span><span>    </span><span style="color:#bf616a;">bpduguard</span><span>: </span><span style="color:#d08770;">True
+</span><span>    </span><span style="color:#bf616a;">portfast</span><span>: </span><span style="color:#d08770;">True
+</span></code></pre>
+<p>This example defines three modules, meta, system, and interfaces. Meta is a special module that contains configuration information, and also selects the driver; which is cumulus in this case. The other modules provide an interface to declare the desired state of certain aspects of the switch.</p>
+<p>In the system module, we are defining a single attribute; hostname. This controls the hostname of the switch. In the interfaces module, we are defining two sub-modules of the interface type, swp1 and swp2. Inside of these sub-modules, attributes are defined that define the behavior for the individual switchports on the system.</p>
+<p>The advantage to these interfaces, is that they are as generic as possible. They try to conform to the standards that each network device follows, not to the language and naming schemes of the individual network device platforms themselves. Each plugin and provider (we will get to those later) can provide their own modules; but they should consume the default ones when possible. This allows the same definition to be applicable to multiple types of network devices of a similar class. In theory, if a switch from “vendor A” supports the same modules as a switch from “vendor B”, their definition files can be completely interchangeable.</p>
+<p>Lets look at a practical example of this:</p>
+<pre data-lang="python" style="background-color:#2b303b;color:#c0c5ce;" class="language-python "><code class="language-python" data-lang="python"><span style="color:#b48ead;">from </span><span>runcible.api </span><span style="color:#b48ead;">import </span><span>Device
+</span><span>
+</span><span>vlans = {
+</span><span>    &quot;</span><span style="color:#a3be8c;">vlans</span><span>&quot;: [
+</span><span>        {&quot;</span><span style="color:#a3be8c;">name</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">Employee Vlan</span><span>&quot;, &quot;</span><span style="color:#a3be8c;">id</span><span>&quot;: </span><span style="color:#d08770;">20</span><span>},
+</span><span>        {&quot;</span><span style="color:#a3be8c;">name</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">Super Secret Secure Vlan</span><span>&quot;, &quot;</span><span style="color:#a3be8c;">id</span><span>&quot;: </span><span style="color:#d08770;">4000</span><span>}
+</span><span>    ]
+</span><span>}
+</span><span>
+</span><span>interface_template = {
+</span><span>    &quot;</span><span style="color:#a3be8c;">interfaces</span><span>&quot;: [
+</span><span>            {&quot;</span><span style="color:#a3be8c;">name</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">swp1</span><span>&quot;, &quot;</span><span style="color:#a3be8c;">pvid</span><span>&quot;: </span><span style="color:#d08770;">22</span><span>, &quot;</span><span style="color:#a3be8c;">bpduguard</span><span>&quot;: </span><span style="color:#d08770;">False</span><span>},
+</span><span>            {&quot;</span><span style="color:#a3be8c;">name</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">swp2</span><span>&quot;, &quot;</span><span style="color:#a3be8c;">pvid</span><span>&quot;: </span><span style="color:#d08770;">23</span><span>, &quot;</span><span style="color:#a3be8c;">bpduguard</span><span>&quot;: </span><span style="color:#d08770;">True</span><span>}
+</span><span>        ]
+</span><span>}
+</span><span>
+</span><span>switch_1 = {
+</span><span>    &quot;</span><span style="color:#a3be8c;">meta</span><span>&quot;: {
+</span><span>        &quot;</span><span style="color:#a3be8c;">device</span><span>&quot;: {
+</span><span>            &quot;</span><span style="color:#a3be8c;">ssh</span><span>&quot;:{
+</span><span>                &quot;</span><span style="color:#a3be8c;">hostname</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">192.168.1.1</span><span>&quot;,
+</span><span>            }
+</span><span>        },
+</span><span>        &quot;</span><span style="color:#a3be8c;">default_management_protocol</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">ssh</span><span>&quot;,
+</span><span>        &quot;</span><span style="color:#a3be8c;">driver</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">vendor-a</span><span>&quot;
+</span><span>    },
+</span><span>    &quot;</span><span style="color:#a3be8c;">system</span><span>&quot;: {
+</span><span>        &quot;</span><span style="color:#a3be8c;">hostname</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">switch1</span><span>&quot;
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span>switch_2 = {
+</span><span>    &quot;</span><span style="color:#a3be8c;">meta</span><span>&quot;: {
+</span><span>        &quot;</span><span style="color:#a3be8c;">device</span><span>&quot;: {
+</span><span>            &quot;</span><span style="color:#a3be8c;">ssh</span><span>&quot;:{
+</span><span>                &quot;</span><span style="color:#a3be8c;">hostname</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">192.168.1.2</span><span>&quot;,
+</span><span>            }
+</span><span>        },
+</span><span>        &quot;</span><span style="color:#a3be8c;">default_management_protocol</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">ssh</span><span>&quot;,
+</span><span>        &quot;</span><span style="color:#a3be8c;">driver</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">vendor-b</span><span>&quot;
+</span><span>    },
+</span><span>    &quot;</span><span style="color:#a3be8c;">system</span><span>&quot;: {
+</span><span>        &quot;</span><span style="color:#a3be8c;">hostname</span><span>&quot;: &quot;</span><span style="color:#a3be8c;">switch2</span><span>&quot;
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">for </span><span>configuration </span><span style="color:#b48ead;">in </span><span>[switch_1, switch_2]:
+</span><span>    configuration.</span><span style="color:#bf616a;">update</span><span>(vlans)
+</span><span>    configuration.</span><span style="color:#bf616a;">update</span><span>(interface_template)
+</span><span>    device = </span><span style="color:#bf616a;">Device</span><span>(configuration[&quot;</span><span style="color:#a3be8c;">system</span><span>&quot;][&quot;</span><span style="color:#a3be8c;">hostname</span><span>&quot;], configuration)
+</span><span>    device.</span><span style="color:#bf616a;">plan</span><span>()
+</span><span>    device.</span><span style="color:#bf616a;">execute</span><span>()
+</span></code></pre>
+<p>As you can see, we have two different devices with two different drivers that support the system, interfaces, and vlans module. Assuming you have a valid plugin for both “vendor-a” and “vendor-b”, you will get effectively the same configuration on both switches (aside from the hostname in this example.)</p>
+<p>Intuitively, adding another vlan to the “vlans” list will add it to both of the switches that merge that part of the configuration.</p>
+<p>If you aren’t a Python developer, don’t worry. Later versions of Runcible with a more complete CLI component will abstract this behavior into a JSON directory structure. No code required.</p>
+<h2 id="topology-aware-schedulers">Topology Aware Schedulers</h2>
+<p>One of the priorities of Runcible in regards to topology discovery, is flexibility. Many devices support discovery protocols such as LLDP and CDP, some vendors offer proprietary methods of discovery, many users will want to define the topology manually, and some will be fine with grouping. A lot of people (especially consultants working in a large number of smaller networks) are probably fine with a naive scheduler that runs on one device at a time until they are all done.</p>
+<p>As for the decisions that are informed by the topology, that remains to be seen somewhat. Again, the focus will be on flexibility. For many changes, it would be better to have a core -&gt; out run order, for others an edge -&gt; core run order. For less fancy operations, it would probably be fine to determine the run order by choosing devices with the least adjacent runs, or just ensure that only one cluster member at a time is being operated on for highly available devices.</p>
+<p>But this will also be one of the final steps in a 1.0 release. The focus for now is a bottom to top implementation of the API functions, meaning that the device API will be more or less complete before the scheduler API is ready, and then a CLI application to wrap all of those will follow.</p>
+<h2 id="operating-on-the-cli-or-whatever-really">Operating on the CLI (Or Whatever, Really)</h2>
+<p>By default, Runcible operates on devices using CLI commands. While this might seem a bit backwards in the {currentyear} REST JSONAPI fervor, it actually has a lot of wonderful side effects. Firstly, any text-based terminal will suffice for configuration. This means that when you go to the datacenter to deploy some switches, you just bring your laptop and clone your definition files locally. Then just plug your serial cable into a switch, and hit go.</p>
+<p>Its a simple concept, but very powerful.</p>
+<h1 id="so-when-can-i-get-it">So, When Can I Get It?</h1>
+<p>Right now, this is a project I’m working on in my spare time, so it might be a while. But I’ve been working on solving this problem for a while now, and I don’t have any intention of stopping. I also welcome contributors, so if you want to bring this about faster; be the change you seek in the world!</p>
+<h2 id="i-want-to-help">I Want to Help!</h2>
+<p>Great! I look forward to working with you!</p>
+<p>The best place to get started is here: https://runcible.readthedocs.io/en/latest/contribution_guide.html</p>
+<p>Right now you won’t find much, and I haven’t posted any issues on GitHub yet, as the internal class structure is still somewhat in flux. Over the few months I’m hoping to get two somewhat feature complete plugins written for Cumulus and Unifi switches. Once these are complete I will begin a big documentation push in an effort to make the project more friendly to new contributors. Around then, I’ll make an announcement that it is “safe” to make pull requests (when the Plugin structure is stable); but until then any PRs submitted have a high chance of being refactored.</p>
+<p>One thing that would be appreciated immediately is installing Runcible, and interacting with the API classes. Let me know how things work out, and how you think the output/public methods should be tweaked for usability and clarity.</p>
+<p>I’m also more than happy to take old network equipment off of people’s hands so long as it still runs a relevant network operating system (for things that can’t be run in a VM anyways.) One of the goals that I have in regards to CI is that each build will have all of the core plugins integration tested with their respective platforms, and in some cases hardware is required.</p>
+
+        </section>
+
+        
+            <div class="post-tags">
+                <nav class="nav tags">
+                    <ul class="tags">
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/python/>Python</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/open-source/>Open Source</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/config-automation/>Config Automation</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/declarative/>Declarative</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/networking/>Networking</a></li>
+                        
+                    </ul>
+                </nav>
+            </div>
+        
+
+    </article>
+</main>
+
+
+
+        <footer>
+	<div style="display:flex">
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;github.com&#x2F;graysonhead title=GitHub>
+	         <i data-feather=github></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;hachyderm.io&#x2F;@Darkside title=Mastadon>
+	         <i data-feather=globe></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;www.linkedin.com&#x2F;in&#x2F;graysonhead&#x2F; title=LinkedIn>
+	         <i data-feather=linkedin></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;pixel.tchncs.de&#x2F;i&#x2F;web title=PixelFed>
+	         <i data-feather=camera></i>
+	     </a>
+	 
+	 </div>
+	 <div class="footer-info">
+	 2026 © Grayson Head
+        </div>
+</footer>
+
+
+<script>
+	    feather.replace();
+</script>
+
+
+    </div>
+</body>
+
+</html>
