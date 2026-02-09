@@ -215,7 +215,7 @@ But what I eventually wound up with, was an NLCD vector that looks somewhat like
 
 Now we need to figure out the dimensions of our newly generated vectors. Specifically, we are looking for at least a 2500ft long 50ft wide path contained within each vector for it to qualify as a potentially landable area.
 
-To do this, we are going to sample 200 points along the perimeter of the polygon, and check each pair to see if:
+To do this, we are going to sample 200 points from the polygon's geometry, and check each pair to see if:
 - It is longer than the minimum candidate distance (currently 2500 feet, but configurable)
 - It is longer than the best one we've already found
 - Verify that the entire length of the segment is entirely contained within the geometry of the polygon
