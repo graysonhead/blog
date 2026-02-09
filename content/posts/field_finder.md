@@ -359,7 +359,7 @@ Additionally, the one huge thing that is missing here is winds. A lot of the exi
 
 # Closing
 
-This tool won't tell you whether a field is safe to land in. Only your eyes and judgment can do that. What it *can* do is highlight where your options thin out, so you know where to look more carefully during preflight planning. And it can answer questions that would be tedious to answer manually, like what altitude you need to maintain to stay within gliding range of a runway.
+This tool won't tell you whether a field is safe to land in. Only your eyes and judgment can do that. For me, the results aren't a go/no-go decision—they're just an easy way to load this aspect of the flight into my head during preflight. The tool highlights where options thin out, what altitudes might be worth considering, and which parts of the route deserve extra attention. And it can answer questions that would be tedious to answer manually, like what altitude you need to maintain to stay within gliding range of a runway.
 
 The datasets here are massive (the SRTM and NLCD data cover the entire continental US at high resolution), which made the pipeline work particularly satisfying. There's something deeply appealing about turning gigabytes of elevation and land cover data into what I hope will be actionable flight planning information.
 
