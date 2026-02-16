@@ -18,7 +18,7 @@ As of the time of writing, most of my flight experience has been in single-engin
 
 <img src="../../images/plenty_of_fields.jpg" alt="Picture taken from a piper archer in an area north of Georgetown showing a ton of fields" />
 
-But, heading back towards our home airport (KGTU), that quickly changes as you cross I-35 and descend to pattern altitude. What was fields only a few miles ago is now densely wooded areas, neighborhoods, and warehouses. At pattern altitude, you have *some* options. But taking off from all but one runway, the only realistic options you have below turnback altitude are trying to get to I-35 and its associated medians and clearings (which you probably won't), or landing in the treetops.
+But, heading back towards our home airport (KGTU), that quickly changes as you cross I-35 and descend to pattern altitude. What was fields only a few miles ago is now densely wooded areas, neighborhoods, and warehouses. At pattern altitude, you have some options (most notably the runway). But taking off from all but one runway, the only realistic options you have below turnback altitude are trying to get to I-35 and its associated medians and clearings (which you probably won't), or landing in the treetops.
 
 # A Brief Aside: Crash Survivability
 
@@ -32,7 +32,7 @@ You might be surprised to learn that the three occupants of this plane survived,
 
 Forced landings in inhospitable environments (rough terrain, trees, etc.) are quite survivable *when executed properly*. Some sources would put the rate of survival somewhere in the 90-97% range [^1], which is similar to the survival rate of ditching in water. But ditching in treetops or other inhospitable environments does carry a significant chance of injury. To make things simple, you can assume the chances of a moderate to serious injury when landing in a dense wooded area are probably about 50/50.
 
-Single-engine aircraft stall at low speeds by design, which means lower impact energy when you hit the ground. Certification standards used to mandate low stall speeds for this reason, though these requirements were revised around 2017. This characteristic, combined with structural requirements[^6] for withstanding abrupt deceleration, means you can land into or onto quite a lot of things with a reasonable chance of survival. Just don't stall and spin. If you lose control and enter a spin, you're likely hitting the ground at 100 knots or more instead of a controlled 50 knots. Get as slow as you can without stalling, and in the words of Bob Hoover, fly the plane as far into the crash as you can. Do this, and your odds of survival are pretty good.
+Single-engine aircraft stall at low speeds by design, which means lower impact energy when you hit the ground. Certification standards used to mandate low stall speeds for this reason, though these requirements were revised around 2017. This characteristic, combined with structural requirements[^6] for withstanding abrupt deceleration, means you can land into or onto quite a lot of things with a reasonable chance of survival. Just don't stall and spin. If you lose control and enter a spin, you're likely hitting the ground at 100 knots or more instead of a controlled 50 knots. Get as slow as you can without stalling, and land into the wind if possible. A headwind reduces your groundspeed, which means less energy you will need to dissipate on the ground. And in the words of Bob Hoover, fly the plane as far into the crash as you can. Do this, and your odds of survival are pretty good.
 
 But it is probably going to hurt.
 
