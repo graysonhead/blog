@@ -326,7 +326,7 @@ You will notice there is a small red segment right as we get to the airport, thi
 
 Second, we are cheating a bit with how we calculate what we can glide to. For the purposes of making the app more performant, we are including a landing area only if we can glide to the centroid of that area. For landing areas, this is conservative, and fine. But with Runways which are long and skinny, we really only care if we can hit the threshold (since we know for sure that runways are usually pretty good places to land). 
 
-It's also useful for answering a question I like to ask before I do my night cross-country: What is the minimum altitude at which you can fly a given route and always (or at least mostly) be in range of a runway?
+It's also useful for answering a question I like to ask before I do a night cross-country: What is the minimum altitude at which you can fly a given route and always (or at least mostly) be in range of a runway?
 
 In the case of a flight between KGTU and KHYI, 6,500 feet leaves you at risk for only two short segments[^5].
 
