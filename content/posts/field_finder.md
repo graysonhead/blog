@@ -95,7 +95,7 @@ In this rendering, darker areas are lower altitudes, and lighter areas are highe
 
 Now we are going to reference this same DEM a few steps down the road, but for now what we care about is finding areas with unacceptable slopes. I picked 8% grade as the rough level of slope I want to exclude (it's configurable, and I'm not sure this is the correct number, but it was a good place to start). I tried this a few different ways, but the way that worked best from a performance standpoint was to take each DEM tile and turn it into an exclusion mask, by comparing adjacent pixels in the raster and figuring out if their slope was greater than 8%. 
 
-To get this, we first need to turn the raster of elevations into an raster of slopes:
+To get this, we first need to turn the raster of elevations into a raster of slopes:
 
 ```rust
 /// Generate a slope raster from a DEM using gdaldem
