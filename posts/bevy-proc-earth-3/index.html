@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+
+    
+    <title>
+         Bevy Procedural Earth Part 3: Visualizations
+        
+    </title>
+
+    
+    <meta property="og:title"
+        content="Bevy Procedural Earth Part 3: Visualizations" />
+    
+    
+
+    
+    
+    
+
+    
+    
+    
+
+    
+
+    
+
+    
+
+    
+    
+    <script src=https://blog.graysonhead.net/js/feather.min.js></script>
+    
+
+
+    
+    <link href=https://blog.graysonhead.net/css/fonts.css rel="stylesheet" />
+    
+
+    <link rel="stylesheet" type="text/css" media="screen" href=https://blog.graysonhead.net/css/main.css />
+
+    
+    <link rel="stylesheet" id="darkModeStyle" type="text/css" href=https://blog.graysonhead.net/css/dark.css   />
+    
+
+
+    
+
+
+</head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-CCTJX63WS9"></script>
+<script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    gtag('js', new Date());
+
+    gtag('config', 'G-CCTJX63WS9');
+</script>
+
+<body>
+    <div class="content">
+        <header>
+    <div class="main" id="main_title">
+        <a href=https:&#x2F;&#x2F;blog.graysonhead.net></a>
+    </div>
+
+    <nav>
+        
+            <a href=&#x2F;posts>&#x2F;posts</a>
+        
+            <a href=&#x2F;projects>&#x2F;projects</a>
+        
+            <a href=&#x2F;about>&#x2F;about</a>
+        
+
+        
+            |
+
+            
+                <a href=&#x2F;>en</a>
+            
+        
+
+        
+    </nav>
+</header>
+
+
+        
+    
+<main>
+    <article>
+        <div class="title">
+            <h1 class="title">Bevy Procedural Earth Part 3: Visualizations</h1>
+            <div class="meta">
+                
+                on  2025-04-23
+
+                
+            </div>
+        </div>
+
+        
+
+        <section class="body">
+            <img src="../../images/earth_banner_3.png" alt="A view of Greenland with Exaggerated Elevation" />
+<p>The main goal of this project for me wasn't primarily about game development, but rather just to have a re-usable way to do global visualizations. One of the most interesting things to visualize on a planet is elevation. So in this tutorial we will look at actually displacing vertices in order to give our sphere some depth. This approach utilizes the high vertex count we generated in previous examples to create meaningful terrain detail.</p>
+<p>In addition, I'll give an example of how you might use this program to visualize non-elevation data.</p>
+<h1 id="elevation-dataset">Elevation Dataset</h1>
+<p>I'm using the <a href="https://www.ncei.noaa.gov/maps/grid-extract/">ETOPO surface elevation models</a> from NOAA in GeoTIFF format at a 60 arcsecond resolution. 60 arcseconds (approximately 1.1 miles at Earth's average surface elevation) is perfectly adequate for what we are doing here. Working with raster files is also nice, because (as discussed in the previous post in this series) we can easily map Latitudes and Longitudes onto the (X, Y) coordinates of our raster using affine transforms (which almost all GIS libraries support).</p>
+<h1 id="reading-data-from-the-raster">Reading Data From The Raster</h1>
+<p>The core functionality is implemented in this struct::</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">pub struct </span><span>RasterData {
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">dataset</span><span>: Dataset,
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">transform</span><span>: CoordTransform,
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl </span><span>RasterData {
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">new</span><span>(</span><span style="color:#bf616a;">path</span><span>: &amp;</span><span style="color:#b48ead;">str</span><span>) -&gt; Result&lt;</span><span style="color:#b48ead;">Self</span><span>, GdalError&gt; {
+</span><span>        </span><span style="color:#b48ead;">let</span><span> dataset = Dataset::open(path)?;
+</span><span>        </span><span style="color:#b48ead;">let</span><span> srs = dataset.</span><span style="color:#96b5b4;">spatial_ref</span><span>()?;
+</span><span>        </span><span style="color:#b48ead;">let</span><span> target_srs = SpatialRef::from_epsg(</span><span style="color:#d08770;">4326</span><span>)?;
+</span><span>        </span><span style="color:#b48ead;">let</span><span> transform = gdal::spatial_ref::CoordTransform::new(&amp;srs, &amp;target_srs)?;
+</span><span>        Ok(</span><span style="color:#b48ead;">Self </span><span>{ dataset, transform })
+</span><span>    }
+</span><span>    </span><span style="color:#65737e;">// Takes a latitude and longitude in WGS84 coordinates (EPSG:4326) and returns the elevation at that point
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">get_coordinate_height</span><span>(
+</span><span>        &amp;</span><span style="color:#bf616a;">self</span><span>,
+</span><span>        </span><span style="color:#bf616a;">latitude</span><span>: </span><span style="color:#b48ead;">f64</span><span>,
+</span><span>        </span><span style="color:#bf616a;">longitude</span><span>: </span><span style="color:#b48ead;">f64</span><span>,
+</span><span>    ) -&gt; Result&lt;Option&lt;</span><span style="color:#b48ead;">f64</span><span>&gt;, GdalError&gt; {
+</span><span>        </span><span style="color:#65737e;">// Copy the input coordinates
+</span><span>        </span><span style="color:#b48ead;">let </span><span>(lat, lon) = (latitude, longitude);
+</span><span>        
+</span><span>        </span><span style="color:#65737e;">// Transform the coordinates from everyone&#39;s favorite datum (WGS84) to the raster&#39;s native coordinate system
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.transform
+</span><span>            .</span><span style="color:#96b5b4;">transform_coords</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span>[lon], &amp;</span><span style="color:#b48ead;">mut </span><span>[lat], &amp;</span><span style="color:#b48ead;">mut </span><span>[])?;
+</span><span>        
+</span><span>        </span><span style="color:#65737e;">// Get the first raster band (usually the only one for elevation data)
+</span><span>        </span><span style="color:#b48ead;">let</span><span> raster_band = </span><span style="color:#bf616a;">self</span><span>.dataset.</span><span style="color:#96b5b4;">rasterband</span><span>(</span><span style="color:#d08770;">1</span><span>)?;
+</span><span>        
+</span><span>        </span><span style="color:#65737e;">// Get the affine transformation parameters that map between pixel/line coordinates and georeferenced coordinates
+</span><span>        </span><span style="color:#b48ead;">let</span><span> transform = </span><span style="color:#bf616a;">self</span><span>.dataset.</span><span style="color:#96b5b4;">geo_transform</span><span>().</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span>        
+</span><span>        </span><span style="color:#65737e;">// Calculate the pixel (x) and line (y) coordinates in the raster using the affine transform
+</span><span>        </span><span style="color:#65737e;">// transform[0] = top left x coordinate (origin)
+</span><span>        </span><span style="color:#65737e;">// transform[1] = pixel width (x resolution)
+</span><span>        </span><span style="color:#65737e;">// transform[3] = top left y coordinate (origin)
+</span><span>        </span><span style="color:#65737e;">// transform[5] = pixel height (y resolution, typically negative as y decreases going down)
+</span><span>        </span><span style="color:#b48ead;">let</span><span> x = (lon - transform[</span><span style="color:#d08770;">0</span><span>]) / transform[</span><span style="color:#d08770;">1</span><span>];
+</span><span>        </span><span style="color:#b48ead;">let</span><span> y = (lat - transform[</span><span style="color:#d08770;">3</span><span>]) / transform[</span><span style="color:#d08770;">5</span><span>];
+</span><span>        
+</span><span>        </span><span style="color:#65737e;">// Read the elevation value at the calculated pixel position
+</span><span>        </span><span style="color:#65737e;">// - Reads a 1x1 window at position (x,y)
+</span><span>        </span><span style="color:#65737e;">// - Uses the Average resampling algorithm (which doesn&#39;t matter much for a 1x1 window)
+</span><span>        </span><span style="color:#65737e;">// - Returns the data as f64 (double precision floating point)
+</span><span>        </span><span style="color:#b48ead;">let mut</span><span> res_buffer = raster_band.read_as::&lt;</span><span style="color:#b48ead;">f64</span><span>&gt;(
+</span><span>            (x as </span><span style="color:#b48ead;">isize</span><span>, y as </span><span style="color:#b48ead;">isize</span><span>),  </span><span style="color:#65737e;">// Pixel position (cast to integer)
+</span><span>            (</span><span style="color:#d08770;">1</span><span>, </span><span style="color:#d08770;">1</span><span>),                    </span><span style="color:#65737e;">// Window size to read (1x1 pixel)
+</span><span>            (</span><span style="color:#d08770;">1</span><span>, </span><span style="color:#d08770;">1</span><span>),                    </span><span style="color:#65737e;">// Output buffer size
+</span><span>            Some(ResampleAlg::Average),</span><span style="color:#65737e;">// Resampling algorithm
+</span><span>        )?;
+</span><span>        
+</span><span>        </span><span style="color:#65737e;">// Return the elevation value (or None if no data is found)
+</span><span>        </span><span style="color:#65737e;">// pop() returns and removes the last element from res_buffer.data
+</span><span>        Ok(res_buffer.data.</span><span style="color:#96b5b4;">pop</span><span>())
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>Here's an example demonstrating how to use this functionality to retrieve elevation data:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span>#[</span><span style="color:#bf616a;">test</span><span>]
+</span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">test_raster_map</span><span>() {
+</span><span>    </span><span style="color:#b48ead;">let</span><span> raster_data =
+</span><span>        RasterData::new(&quot;</span><span style="color:#a3be8c;">assets/Bathymetry/gebco_2023_n47.7905_s39.9243_w25.6311_e42.9895.tif</span><span>&quot;)
+</span><span>            .</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// Mt Elbrus
+</span><span>    </span><span style="color:#b48ead;">let</span><span> tgt_latitude = </span><span style="color:#d08770;">43.351851</span><span>;
+</span><span>    </span><span style="color:#b48ead;">let</span><span> tgt_longitude = </span><span style="color:#d08770;">42.4368771</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">let</span><span> elevation = raster_data
+</span><span>        .</span><span style="color:#96b5b4;">get_coordinate_height</span><span>(tgt_latitude, tgt_longitude)
+</span><span>        .</span><span style="color:#96b5b4;">unwrap</span><span>()
+</span><span>        .</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span>
+</span><span>    assert_eq!(elevation, </span><span style="color:#d08770;">5392.0</span><span>);
+</span><span>}
+</span></code></pre>
+<p>And that is basically all there is to extracting data from a raster. If you want to be more precise, it might be useful to calculate the average area represented by each vertex and sample a larger size, averaging the result (which you can adjust by changing the window size) or using a different resampling technique. But since our goal isn't to create ultra-accurate maps I think this should be good enough.</p>
+<h1 id="moving-pixels">Moving Pixels</h1>
+<p>Now, I first want to say, this is an extremely unoptimized naive way to do this. If I had more time to dedicate to this little experiment, I would probably split the rendering of each tile (since we constructed our sphere from multiple distinct Entities) into multiple systems so it can generate the offsets in paralell. But perfect is the enemy of done, so here is something that at least works. </p>
+<p>Modifying our pre-existing <code>generate_face</code> function, we can accomplish what we need to do with two additional lines:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">generate_face</span><span>(
+</span><span>    </span><span style="color:#bf616a;">normal</span><span>: Vec3,
+</span><span>    </span><span style="color:#bf616a;">resolution</span><span>: </span><span style="color:#b48ead;">u32</span><span>,
+</span><span>    </span><span style="color:#bf616a;">x_offset</span><span>: </span><span style="color:#b48ead;">f32</span><span>,
+</span><span>    </span><span style="color:#bf616a;">y_offset</span><span>: </span><span style="color:#b48ead;">f32</span><span>,
+</span><span>    </span><span style="color:#bf616a;">rs</span><span>: &amp;RasterData,
+</span><span>) -&gt; Mesh {
+</span><span>    </span><span style="color:#b48ead;">let</span><span> axis_a = Vec3::new(normal.y, normal.z, normal.x); </span><span style="color:#65737e;">// Horizontal
+</span><span>    </span><span style="color:#b48ead;">let</span><span> axis_b = axis_a.</span><span style="color:#96b5b4;">cross</span><span>(normal); </span><span style="color:#65737e;">// Vertical
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// Create a vec of verticies and indicies
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> verticies: Vec&lt;Vec3&gt; = Vec::new();
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> uvs = Vec::new();
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> indicies: Vec&lt;</span><span style="color:#b48ead;">u32</span><span>&gt; = Vec::new();
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> normals = Vec::new();
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> first_longitude = </span><span style="color:#d08770;">0.0</span><span>;
+</span><span>    </span><span style="color:#b48ead;">for</span><span> y in </span><span style="color:#d08770;">0</span><span>..(resolution) {
+</span><span>        </span><span style="color:#b48ead;">for</span><span> x in </span><span style="color:#d08770;">0</span><span>..(resolution) {
+</span><span>            </span><span style="color:#b48ead;">let</span><span> i = x + y * resolution;
+</span><span>
+</span><span>            </span><span style="color:#b48ead;">let</span><span> percent = Vec2::new(x as </span><span style="color:#b48ead;">f32</span><span>, y as </span><span style="color:#b48ead;">f32</span><span>) / (resolution - </span><span style="color:#d08770;">1</span><span>) as </span><span style="color:#b48ead;">f32</span><span>;
+</span><span>            </span><span style="color:#b48ead;">let</span><span> point_on_unit_cube =
+</span><span>                normal + (percent.x - x_offset) * axis_a + (percent.y - y_offset) * axis_b;
+</span><span>            </span><span style="color:#b48ead;">let</span><span> point_coords: Coordinates = point_on_unit_cube.</span><span style="color:#96b5b4;">normalize</span><span>().</span><span style="color:#96b5b4;">into</span><span>();
+</span><span>            </span><span style="color:#b48ead;">let </span><span>(lat, lon) = point_coords.</span><span style="color:#96b5b4;">as_degrees</span><span>();
+</span><span>            </span><span style="color:#65737e;">// Get the height value at the geographic coordinates
+</span><span>            </span><span style="color:#b48ead;">let</span><span> height_offset = rs.</span><span style="color:#96b5b4;">get_coordinate_height</span><span>(lat as </span><span style="color:#b48ead;">f64</span><span>, lon as </span><span style="color:#b48ead;">f64</span><span>);
+</span><span>            </span><span style="color:#65737e;">// Add the elevation to the earth_radius value of the normalized point
+</span><span>            </span><span style="color:#b48ead;">let</span><span> normalized_point = </span><span style="color:#b48ead;">if let </span><span>Ok(Some(offset)) = height_offset {
+</span><span>                </span><span style="color:#b48ead;">let</span><span> height = </span><span style="color:#b48ead;">if</span><span> offset &gt; </span><span style="color:#d08770;">0.0 </span><span>{ offset / </span><span style="color:#d08770;">1000.0 </span><span>} </span><span style="color:#b48ead;">else </span><span>{ </span><span style="color:#d08770;">0.0 </span><span>};
+</span><span>                point_on_unit_cube.</span><span style="color:#96b5b4;">normalize</span><span>() * (</span><span style="color:#d08770;">EARTH_RADIUS </span><span>+ (height) as </span><span style="color:#b48ead;">f32</span><span>)
+</span><span>            } </span><span style="color:#b48ead;">else </span><span>{
+</span><span>                point_on_unit_cube.</span><span style="color:#96b5b4;">normalize</span><span>() * </span><span style="color:#d08770;">EARTH_RADIUS
+</span><span>            };
+</span><span>
+</span><span>            verticies.</span><span style="color:#96b5b4;">push</span><span>(normalized_point);
+</span><span>            </span><span style="color:#b48ead;">let </span><span>(</span><span style="color:#b48ead;">mut</span><span> u, v) = point_coords.</span><span style="color:#96b5b4;">convert_to_uv_mercator</span><span>();
+</span><span>
+</span><span>            </span><span style="color:#b48ead;">if</span><span> y == </span><span style="color:#d08770;">0 </span><span>&amp;&amp; x == </span><span style="color:#d08770;">0 </span><span>{
+</span><span>                first_longitude = lon;
+</span><span>            }
+</span><span>            </span><span style="color:#65737e;">// In the middle latitudes, if we start on a negative longitude but then wind up crossing to a positive longitude, set u to 0.0 to prevent a seam
+</span><span>            </span><span style="color:#b48ead;">if</span><span> first_longitude &lt; </span><span style="color:#d08770;">0.0 </span><span>&amp;&amp; lon &gt; </span><span style="color:#d08770;">0.0 </span><span>&amp;&amp; lat &lt; </span><span style="color:#d08770;">89.0 </span><span>&amp;&amp; lat &gt; -</span><span style="color:#d08770;">89.0 </span><span>{
+</span><span>                u = </span><span style="color:#d08770;">0.0</span><span>;
+</span><span>            }
+</span><span>            </span><span style="color:#65737e;">// If we are below -40 degrees latitude and the tile starts at 180 degrees, set u to 0.0 to prevent a seam
+</span><span>            </span><span style="color:#b48ead;">if</span><span> x == </span><span style="color:#d08770;">0 </span><span>&amp;&amp; lon == </span><span style="color:#d08770;">180.0 </span><span>&amp;&amp; lat &lt; -</span><span style="color:#d08770;">40.0 </span><span>{
+</span><span>                u = </span><span style="color:#d08770;">0.0</span><span>;
+</span><span>            }
+</span><span>            uvs.</span><span style="color:#96b5b4;">push</span><span>([u, v]);
+</span><span>            normals.</span><span style="color:#96b5b4;">push</span><span>(-point_on_unit_cube.</span><span style="color:#96b5b4;">normalize</span><span>());
+</span><span>
+</span><span>            </span><span style="color:#b48ead;">if</span><span> x != resolution - </span><span style="color:#d08770;">1 </span><span>&amp;&amp; y != resolution - </span><span style="color:#d08770;">1 </span><span>{
+</span><span>                </span><span style="color:#65737e;">// First triangle
+</span><span>                indicies.</span><span style="color:#96b5b4;">push</span><span>(i);
+</span><span>                indicies.</span><span style="color:#96b5b4;">push</span><span>(i + resolution);
+</span><span>                indicies.</span><span style="color:#96b5b4;">push</span><span>(i + resolution + </span><span style="color:#d08770;">1</span><span>);
+</span><span>
+</span><span>                </span><span style="color:#65737e;">// Second triangle
+</span><span>                indicies.</span><span style="color:#96b5b4;">push</span><span>(i);
+</span><span>                indicies.</span><span style="color:#96b5b4;">push</span><span>(i + resolution + </span><span style="color:#d08770;">1</span><span>);
+</span><span>                indicies.</span><span style="color:#96b5b4;">push</span><span>(i + </span><span style="color:#d08770;">1</span><span>);
+</span><span>            }
+</span><span>        }
+</span><span>    }
+</span><span>    </span><span style="color:#b48ead;">let</span><span> indicies = mesh::Indices::</span><span style="color:#d08770;">U32</span><span>(indicies);
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> mesh = Mesh::new(PrimitiveTopology::TriangleList);
+</span><span>    mesh.</span><span style="color:#96b5b4;">set_indices</span><span>(Some(indicies));
+</span><span>    mesh.</span><span style="color:#96b5b4;">insert_attribute</span><span>(Mesh::</span><span style="color:#d08770;">ATTRIBUTE_POSITION</span><span>, verticies);
+</span><span>    mesh.</span><span style="color:#96b5b4;">insert_attribute</span><span>(Mesh::</span><span style="color:#d08770;">ATTRIBUTE_NORMAL</span><span>, normals);
+</span><span>    mesh.</span><span style="color:#96b5b4;">insert_attribute</span><span>(Mesh::</span><span style="color:#d08770;">ATTRIBUTE_UV_0</span><span>, uvs);
+</span><span>    mesh.</span><span style="color:#96b5b4;">generate_tangents</span><span>().</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span>    mesh
+</span><span>}
+</span></code></pre>
+<p>Specifically, the lines we added:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#65737e;">// Get the height value at the geographic coordinates
+</span><span>lvet height_offset = rs.</span><span style="color:#96b5b4;">get_coordinate_height</span><span>(lat as </span><span style="color:#b48ead;">f64</span><span>, lon as </span><span style="color:#b48ead;">f64</span><span>);
+</span><span style="color:#65737e;">// Add the elevation to the earth_radius value of the normalized point
+</span><span style="color:#b48ead;">let</span><span> normalized_point = </span><span style="color:#b48ead;">if let </span><span>Ok(Some(offset)) = height_offset {
+</span><span>    </span><span style="color:#b48ead;">let</span><span> height = </span><span style="color:#b48ead;">if</span><span> offset &gt; </span><span style="color:#d08770;">0.0 </span><span>{ offset / </span><span style="color:#d08770;">1000.0 </span><span>} </span><span style="color:#b48ead;">else </span><span>{ </span><span style="color:#d08770;">0.0 </span><span>};
+</span><span>    point_on_unit_cube.</span><span style="color:#96b5b4;">normalize</span><span>() * (</span><span style="color:#d08770;">EARTH_RADIUS </span><span>+ (height) as </span><span style="color:#b48ead;">f32</span><span>)
+</span><span>} </span><span style="color:#b48ead;">else </span><span>{
+</span><span>    point_on_unit_cube.</span><span style="color:#96b5b4;">normalize</span><span>() * </span><span style="color:#d08770;">EARTH_RADIUS
+</span><span>};
+</span></code></pre>
+<p>As you can see, this is pretty simple since it just builds off of what we already have. You can change the number that divides the offset to adjust how exaggerated the values are. If <code>EARTH_RADIUS</code> is the radius of the earth in meters, a value of <code>1.0</code> should give you a perfectly proportional earth. Of course, you won't move each vertex much at all at that point, and with the number of vertices in the sphere, you wouldn't be able to see anything anyways.</p>
+<img src="../../images/bevy_earth_final_elevation.png" alt="An exaggerated elevation map using the above settings" />
+<h1 id="visualizing-other-data">Visualizing Other Data</h1>
+<p>Assuming you want to visualize using new entities, you can easily do so as long as you have a value you want to base the color/shape/size of the new entity on, and the latitude and longitude of the datapoint by converting the LatLon to a <code>Vec3</code> of a point on the sphere. Here is the struct I use to do all my Geographic/Cartesian coordinate conversions for reference:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span>#[</span><span style="color:#bf616a;">derive</span><span>(Debug)]
+</span><span style="color:#b48ead;">pub struct </span><span>Coordinates {
+</span><span>    </span><span style="color:#65737e;">// Stored internally in radians (because math)
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">latitude</span><span>: </span><span style="color:#b48ead;">f32</span><span>,
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">longitude</span><span>: </span><span style="color:#b48ead;">f32</span><span>,
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl </span><span>From&lt;Vec3&gt; </span><span style="color:#b48ead;">for </span><span>Coordinates {
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">from</span><span>(</span><span style="color:#bf616a;">value</span><span>: Vec3) -&gt; </span><span style="color:#b48ead;">Self </span><span>{
+</span><span>        </span><span style="color:#b48ead;">let</span><span> normalized_point = value.</span><span style="color:#96b5b4;">normalize</span><span>();
+</span><span>        </span><span style="color:#b48ead;">let</span><span> latitude = normalized_point.y.</span><span style="color:#96b5b4;">asin</span><span>();
+</span><span>        </span><span style="color:#b48ead;">let</span><span> longitude = normalized_point.x.</span><span style="color:#96b5b4;">atan2</span><span>(normalized_point.z);
+</span><span>        Coordinates {
+</span><span>            latitude,
+</span><span>            longitude,
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl </span><span>Coordinates {
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">as_degrees</span><span>(&amp;</span><span style="color:#bf616a;">self</span><span>) -&gt; (</span><span style="color:#b48ead;">f32</span><span>, </span><span style="color:#b48ead;">f32</span><span>) {
+</span><span>        </span><span style="color:#b48ead;">let</span><span> latitude = </span><span style="color:#bf616a;">self</span><span>.latitude * (</span><span style="color:#d08770;">180.0 </span><span>/ </span><span style="color:#d08770;">PI</span><span>);
+</span><span>        </span><span style="color:#b48ead;">let</span><span> longitude = </span><span style="color:#bf616a;">self</span><span>.longitude * (</span><span style="color:#d08770;">180.0 </span><span>/ </span><span style="color:#d08770;">PI</span><span>);
+</span><span>        (latitude, longitude)
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">convert_to_uv_mercator</span><span>(&amp;</span><span style="color:#bf616a;">self</span><span>) -&gt; (</span><span style="color:#b48ead;">f32</span><span>, </span><span style="color:#b48ead;">f32</span><span>) {
+</span><span>        </span><span style="color:#b48ead;">let </span><span>(lat, lon) = </span><span style="color:#bf616a;">self</span><span>.</span><span style="color:#96b5b4;">as_degrees</span><span>();
+</span><span>        </span><span style="color:#b48ead;">let</span><span> v = </span><span style="color:#96b5b4;">map_latitude</span><span>(lat).</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span>        </span><span style="color:#b48ead;">let</span><span> u = </span><span style="color:#96b5b4;">map_longitude</span><span>(lon).</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span>        (u, v)
+</span><span>    }
+</span><span>
+</span><span>    #[</span><span style="color:#bf616a;">allow</span><span>(dead_code)]
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">from_degrees</span><span>(</span><span style="color:#bf616a;">latitude</span><span>: </span><span style="color:#b48ead;">f32</span><span>, </span><span style="color:#bf616a;">longitude</span><span>: </span><span style="color:#b48ead;">f32</span><span>) -&gt; Result&lt;</span><span style="color:#b48ead;">Self</span><span>, CoordError&gt; {
+</span><span>        </span><span style="color:#b48ead;">if </span><span>!(-</span><span style="color:#d08770;">90.0</span><span>..=</span><span style="color:#d08770;">90.0</span><span>).</span><span style="color:#96b5b4;">contains</span><span>(&amp;latitude) {
+</span><span>            </span><span style="color:#b48ead;">return </span><span>Err(CoordError {
+</span><span>                msg: &quot;</span><span style="color:#a3be8c;">Invalid latitude: {lat:?}</span><span>&quot;.</span><span style="color:#96b5b4;">to_string</span><span>(),
+</span><span>            });
+</span><span>        }
+</span><span>        </span><span style="color:#b48ead;">if </span><span>!(-</span><span style="color:#d08770;">180.0</span><span>..=</span><span style="color:#d08770;">180.0</span><span>).</span><span style="color:#96b5b4;">contains</span><span>(&amp;longitude) {
+</span><span>            </span><span style="color:#b48ead;">return </span><span>Err(CoordError {
+</span><span>                msg: &quot;</span><span style="color:#a3be8c;">Invalid longitude: {lon:?}</span><span>&quot;.</span><span style="color:#96b5b4;">to_string</span><span>(),
+</span><span>            });
+</span><span>        }
+</span><span>        </span><span style="color:#b48ead;">let</span><span> latitude = latitude / (</span><span style="color:#d08770;">180.0 </span><span>/ </span><span style="color:#d08770;">PI</span><span>);
+</span><span>        </span><span style="color:#b48ead;">let</span><span> longitude = longitude / (</span><span style="color:#d08770;">180.0 </span><span>/ </span><span style="color:#d08770;">PI</span><span>);
+</span><span>        Ok(Coordinates {
+</span><span>            latitude,
+</span><span>            longitude,
+</span><span>        })
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">get_point_on_sphere</span><span>(&amp;</span><span style="color:#bf616a;">self</span><span>) -&gt; Vec3 {
+</span><span>        </span><span style="color:#b48ead;">let</span><span> y = </span><span style="color:#bf616a;">self</span><span>.latitude.</span><span style="color:#96b5b4;">sin</span><span>();
+</span><span>        </span><span style="color:#b48ead;">let</span><span> r = </span><span style="color:#bf616a;">self</span><span>.latitude.</span><span style="color:#96b5b4;">cos</span><span>();
+</span><span>        </span><span style="color:#b48ead;">let</span><span> x = </span><span style="color:#bf616a;">self</span><span>.longitude.</span><span style="color:#96b5b4;">sin</span><span>() * r;
+</span><span>        </span><span style="color:#b48ead;">let</span><span> z = </span><span style="color:#bf616a;">self</span><span>.longitude.</span><span style="color:#96b5b4;">cos</span><span>() * r;
+</span><span>        Vec3::new(x, y, z).</span><span style="color:#96b5b4;">normalize</span><span>() * </span><span style="color:#d08770;">EARTH_RADIUS
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>So if we wanted to visualize cities with a population over 1 million as spheres, colored and sized based on total population, we could implement a system like this:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">spawn_city_population_spheres</span><span>(
+</span><span>    </span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">commands</span><span>: Commands,
+</span><span>    </span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">meshes</span><span>: ResMut&lt;Assets&lt;Mesh&gt;&gt;,
+</span><span>    </span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">materials</span><span>: ResMut&lt;Assets&lt;StandardMaterial&gt;&gt;,
+</span><span>) {
+</span><span>    </span><span style="color:#65737e;">// Cities data: (name, latitude, longitude, population in millions)
+</span><span>    </span><span style="color:#b48ead;">let</span><span> major_cities: Vec&lt;(String, </span><span style="color:#b48ead;">f32</span><span>, </span><span style="color:#b48ead;">f32</span><span>, </span><span style="color:#b48ead;">f32</span><span>)&gt; = vec![
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Tokyo</span><span>&quot;), </span><span style="color:#d08770;">35.6762</span><span>, </span><span style="color:#d08770;">139.6503</span><span>, </span><span style="color:#d08770;">37.4</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Delhi</span><span>&quot;), </span><span style="color:#d08770;">28.6139</span><span>, </span><span style="color:#d08770;">77.2090</span><span>, </span><span style="color:#d08770;">32.9</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Shanghai</span><span>&quot;), </span><span style="color:#d08770;">31.2304</span><span>, </span><span style="color:#d08770;">121.4737</span><span>, </span><span style="color:#d08770;">28.5</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">São Paulo</span><span>&quot;), -</span><span style="color:#d08770;">23.5505</span><span>, -</span><span style="color:#d08770;">46.6333</span><span>, </span><span style="color:#d08770;">22.4</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Mexico City</span><span>&quot;), </span><span style="color:#d08770;">19.4326</span><span>, -</span><span style="color:#d08770;">99.1332</span><span>, </span><span style="color:#d08770;">22.2</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Cairo</span><span>&quot;), </span><span style="color:#d08770;">30.0444</span><span>, </span><span style="color:#d08770;">31.2357</span><span>, </span><span style="color:#d08770;">21.3</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Mumbai</span><span>&quot;), </span><span style="color:#d08770;">19.0760</span><span>, </span><span style="color:#d08770;">72.8777</span><span>, </span><span style="color:#d08770;">20.7</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Beijing</span><span>&quot;), </span><span style="color:#d08770;">39.9042</span><span>, </span><span style="color:#d08770;">116.4074</span><span>, </span><span style="color:#d08770;">20.5</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Dhaka</span><span>&quot;), </span><span style="color:#d08770;">23.8103</span><span>, </span><span style="color:#d08770;">90.4125</span><span>, </span><span style="color:#d08770;">19.6</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Osaka</span><span>&quot;), </span><span style="color:#d08770;">34.6937</span><span>, </span><span style="color:#d08770;">135.5023</span><span>, </span><span style="color:#d08770;">19.2</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">New York</span><span>&quot;), </span><span style="color:#d08770;">40.7128</span><span>, -</span><span style="color:#d08770;">74.0060</span><span>, </span><span style="color:#d08770;">18.8</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Karachi</span><span>&quot;), </span><span style="color:#d08770;">24.8607</span><span>, </span><span style="color:#d08770;">67.0011</span><span>, </span><span style="color:#d08770;">16.5</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Buenos Aires</span><span>&quot;), -</span><span style="color:#d08770;">34.6037</span><span>, -</span><span style="color:#d08770;">58.3816</span><span>, </span><span style="color:#d08770;">15.2</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Istanbul</span><span>&quot;), </span><span style="color:#d08770;">41.0082</span><span>, </span><span style="color:#d08770;">28.9784</span><span>, </span><span style="color:#d08770;">15.1</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Kolkata</span><span>&quot;), </span><span style="color:#d08770;">22.5726</span><span>, </span><span style="color:#d08770;">88.3639</span><span>, </span><span style="color:#d08770;">14.9</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Lagos</span><span>&quot;), </span><span style="color:#d08770;">6.5244</span><span>, </span><span style="color:#d08770;">3.3792</span><span>, </span><span style="color:#d08770;">14.8</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">London</span><span>&quot;), </span><span style="color:#d08770;">51.5074</span><span>, -</span><span style="color:#d08770;">0.1278</span><span>, </span><span style="color:#d08770;">14.3</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Los Angeles</span><span>&quot;), </span><span style="color:#d08770;">34.0522</span><span>, -</span><span style="color:#d08770;">118.2437</span><span>, </span><span style="color:#d08770;">13.2</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Manila</span><span>&quot;), </span><span style="color:#d08770;">14.5995</span><span>, </span><span style="color:#d08770;">120.9842</span><span>, </span><span style="color:#d08770;">13.1</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Rio de Janeiro</span><span>&quot;), -</span><span style="color:#d08770;">22.9068</span><span>, -</span><span style="color:#d08770;">43.1729</span><span>, </span><span style="color:#d08770;">13.0</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Tianjin</span><span>&quot;), </span><span style="color:#d08770;">39.3434</span><span>, </span><span style="color:#d08770;">117.3616</span><span>, </span><span style="color:#d08770;">12.8</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Kinshasa</span><span>&quot;), -</span><span style="color:#d08770;">4.4419</span><span>, </span><span style="color:#d08770;">15.2663</span><span>, </span><span style="color:#d08770;">12.6</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Paris</span><span>&quot;), </span><span style="color:#d08770;">48.8566</span><span>, </span><span style="color:#d08770;">2.3522</span><span>, </span><span style="color:#d08770;">11.1</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Shenzhen</span><span>&quot;), </span><span style="color:#d08770;">22.5431</span><span>, </span><span style="color:#d08770;">114.0579</span><span>, </span><span style="color:#d08770;">10.6</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Jakarta</span><span>&quot;), -</span><span style="color:#d08770;">6.2088</span><span>, </span><span style="color:#d08770;">106.8456</span><span>, </span><span style="color:#d08770;">10.6</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Bangalore</span><span>&quot;), </span><span style="color:#d08770;">12.9716</span><span>, </span><span style="color:#d08770;">77.5946</span><span>, </span><span style="color:#d08770;">10.5</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Moscow</span><span>&quot;), </span><span style="color:#d08770;">55.7558</span><span>, </span><span style="color:#d08770;">37.6173</span><span>, </span><span style="color:#d08770;">10.5</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Chennai</span><span>&quot;), </span><span style="color:#d08770;">13.0827</span><span>, </span><span style="color:#d08770;">80.2707</span><span>, </span><span style="color:#d08770;">10.0</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Lima</span><span>&quot;), -</span><span style="color:#d08770;">12.0464</span><span>, -</span><span style="color:#d08770;">77.0428</span><span>, </span><span style="color:#d08770;">9.7</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Bangkok</span><span>&quot;), </span><span style="color:#d08770;">13.7563</span><span>, </span><span style="color:#d08770;">100.5018</span><span>, </span><span style="color:#d08770;">9.6</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Seoul</span><span>&quot;), </span><span style="color:#d08770;">37.5665</span><span>, </span><span style="color:#d08770;">126.9780</span><span>, </span><span style="color:#d08770;">9.5</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Hyderabad</span><span>&quot;), </span><span style="color:#d08770;">17.3850</span><span>, </span><span style="color:#d08770;">78.4867</span><span>, </span><span style="color:#d08770;">9.5</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Chengdu</span><span>&quot;), </span><span style="color:#d08770;">30.5728</span><span>, </span><span style="color:#d08770;">104.0668</span><span>, </span><span style="color:#d08770;">9.3</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Singapore</span><span>&quot;), </span><span style="color:#d08770;">1.3521</span><span>, </span><span style="color:#d08770;">103.8198</span><span>, </span><span style="color:#d08770;">5.7</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Ho Chi Minh City</span><span>&quot;), </span><span style="color:#d08770;">10.8231</span><span>, </span><span style="color:#d08770;">106.6297</span><span>, </span><span style="color:#d08770;">9.1</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Toronto</span><span>&quot;), </span><span style="color:#d08770;">43.6532</span><span>, -</span><span style="color:#d08770;">79.3832</span><span>, </span><span style="color:#d08770;">6.4</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Sydney</span><span>&quot;), -</span><span style="color:#d08770;">33.8688</span><span>, </span><span style="color:#d08770;">151.2093</span><span>, </span><span style="color:#d08770;">5.3</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Johannesburg</span><span>&quot;), -</span><span style="color:#d08770;">26.2041</span><span>, </span><span style="color:#d08770;">28.0473</span><span>, </span><span style="color:#d08770;">5.9</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Chicago</span><span>&quot;), </span><span style="color:#d08770;">41.8781</span><span>, -</span><span style="color:#d08770;">87.6298</span><span>, </span><span style="color:#d08770;">8.9</span><span>),
+</span><span>        (String::from(&quot;</span><span style="color:#a3be8c;">Taipei</span><span>&quot;), </span><span style="color:#d08770;">25.0330</span><span>, </span><span style="color:#d08770;">121.5654</span><span>, </span><span style="color:#d08770;">7.4</span><span>),
+</span><span>    ];
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// Define constants for scaling the spheres
+</span><span>    </span><span style="color:#b48ead;">const </span><span style="color:#d08770;">BASE_RADIUS</span><span>: </span><span style="color:#b48ead;">f32 </span><span>= </span><span style="color:#d08770;">2.0</span><span>; </span><span style="color:#65737e;">// Minimum radius for smallest city
+</span><span>    </span><span style="color:#b48ead;">const </span><span style="color:#d08770;">SCALE_FACTOR</span><span>: </span><span style="color:#b48ead;">f32 </span><span>= </span><span style="color:#d08770;">0.5</span><span>; </span><span style="color:#65737e;">// Multiplier for population to radius conversion
+</span><span>    </span><span style="color:#b48ead;">const </span><span style="color:#d08770;">MIN_POPULATION</span><span>: </span><span style="color:#b48ead;">f32 </span><span>= </span><span style="color:#d08770;">5.0</span><span>; </span><span style="color:#65737e;">// For normalization purposes
+</span><span>    </span><span style="color:#b48ead;">const </span><span style="color:#d08770;">MAX_POPULATION</span><span>: </span><span style="color:#b48ead;">f32 </span><span>= </span><span style="color:#d08770;">40.0</span><span>; </span><span style="color:#65737e;">// For normalization purposes
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// Create a component to store city information.
+</span><span>    </span><span style="color:#65737e;">// Not used in this example, but could be used for a tooltip or similar.
+</span><span>    #[</span><span style="color:#bf616a;">derive</span><span>(Component)]
+</span><span>    </span><span style="color:#b48ead;">struct </span><span>CityMarker {
+</span><span>        </span><span style="color:#bf616a;">name</span><span>: String,
+</span><span>        </span><span style="color:#bf616a;">population</span><span>: </span><span style="color:#b48ead;">f32</span><span>,
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// Create a mesh that will be reused for all cities
+</span><span>    </span><span style="color:#b48ead;">let</span><span> sphere_mesh = meshes.</span><span style="color:#96b5b4;">add</span><span>(
+</span><span>        Mesh::try_from(shape::Icosphere {
+</span><span>            radius: </span><span style="color:#d08770;">1.0</span><span>, </span><span style="color:#65737e;">// We&#39;ll scale this in the transform
+</span><span>            subdivisions: </span><span style="color:#d08770;">32</span><span>,
+</span><span>        })
+</span><span>        .</span><span style="color:#96b5b4;">unwrap</span><span>(),
+</span><span>    );
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// Spawn a sphere for each city
+</span><span>    </span><span style="color:#b48ead;">for </span><span>(name, latitude, longitude, population) in major_cities {
+</span><span>        </span><span style="color:#65737e;">// Convert latitude and longitude to 3D coordinates on the sphere
+</span><span>        </span><span style="color:#b48ead;">let</span><span> coords = Coordinates::from_degrees(latitude, longitude)
+</span><span>            .</span><span style="color:#96b5b4;">unwrap</span><span>()
+</span><span>            .</span><span style="color:#96b5b4;">get_point_on_sphere</span><span>();
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Calculate sphere size based on population
+</span><span>        </span><span style="color:#65737e;">// Using a logarithmic scale to prevent extremely large cities from dominating
+</span><span>        </span><span style="color:#b48ead;">let</span><span> normalized_population =
+</span><span>            (population - </span><span style="color:#d08770;">MIN_POPULATION</span><span>) / (</span><span style="color:#d08770;">MAX_POPULATION </span><span>- </span><span style="color:#d08770;">MIN_POPULATION</span><span>);
+</span><span>        </span><span style="color:#b48ead;">let</span><span> size = </span><span style="color:#d08770;">BASE_RADIUS </span><span>+ (normalized_population * </span><span style="color:#d08770;">SCALE_FACTOR </span><span>* </span><span style="color:#d08770;">10.0</span><span>);
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Calculate color based on population (gradient from yellow to red)
+</span><span>        </span><span style="color:#b48ead;">let</span><span> t = normalized_population.</span><span style="color:#96b5b4;">clamp</span><span>(</span><span style="color:#d08770;">0.0</span><span>, </span><span style="color:#d08770;">1.0</span><span>);
+</span><span>        </span><span style="color:#b48ead;">let</span><span> color = Color::rgb(
+</span><span>            </span><span style="color:#d08770;">1.0</span><span>,             </span><span style="color:#65737e;">// Red stays at 1.0
+</span><span>            </span><span style="color:#d08770;">1.0 </span><span>- (t * </span><span style="color:#d08770;">0.7</span><span>), </span><span style="color:#65737e;">// Green decreases with population
+</span><span>            </span><span style="color:#d08770;">0.5 </span><span>- (t * </span><span style="color:#d08770;">0.4</span><span>), </span><span style="color:#65737e;">// Blue decreases with population
+</span><span>        );
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Spawn the city sphere
+</span><span>        commands.</span><span style="color:#96b5b4;">spawn</span><span>((
+</span><span>            PbrBundle {
+</span><span>                mesh: sphere_mesh.</span><span style="color:#96b5b4;">clone</span><span>(),
+</span><span>                material: materials.</span><span style="color:#96b5b4;">add</span><span>(StandardMaterial {
+</span><span>                    base_color: color,
+</span><span>                    unlit: </span><span style="color:#d08770;">true</span><span>,
+</span><span>                    ..</span><span style="color:#96b5b4;">default</span><span>()
+</span><span>                }),
+</span><span>                transform: Transform::from_translation(Vec3::new(coords.x, coords.y, coords.z))
+</span><span>                    .</span><span style="color:#96b5b4;">with_scale</span><span>(Vec3::splat(size)),
+</span><span>                ..</span><span style="color:#96b5b4;">default</span><span>()
+</span><span>            },
+</span><span>            CityMarker { name, population },
+</span><span>        ));
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>Which will render a lovely scaled and colored sphere on each of our coordinates.</p>
+<img src="../../images/bevy_world_pop_map.png" alt="Map visualizing population in major cities" />
+<p>In closing, I hope this is informative. I'd like to eventually make this a bit more general and re-usable. Perhaps releasing it as a library or as a WASM app in the future. Building this was an incredible learning experience though. I was a complete newbie to GIS concepts before this. And knowing how to read from Geographic raster files is an incredibly useful thing that can be utilized in lots of different software engineering domains.</p>
+
+        </section>
+
+        
+            <div class="post-tags">
+                <nav class="nav tags">
+                    <ul class="tags">
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/rust/>Rust</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/bevy/>Bevy</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/gamedev/>Gamedev</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/procedural-mesh/>Procedural Mesh</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/gis/>GIS</a></li>
+                        
+                    </ul>
+                </nav>
+            </div>
+        
+
+    </article>
+</main>
+
+
+
+        <footer>
+	<div style="display:flex">
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;github.com&#x2F;graysonhead title=GitHub>
+	         <i data-feather=github></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;hachyderm.io&#x2F;@Darkside title=Mastadon>
+	         <i data-feather=globe></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;www.linkedin.com&#x2F;in&#x2F;graysonhead&#x2F; title=LinkedIn>
+	         <i data-feather=linkedin></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;pixel.tchncs.de&#x2F;i&#x2F;web title=PixelFed>
+	         <i data-feather=camera></i>
+	     </a>
+	 
+	 </div>
+	 <div class="footer-info">
+	 2026 © Grayson Head
+        </div>
+</footer>
+
+
+<script>
+	    feather.replace();
+</script>
+
+
+    </div>
+</body>
+
+</html>

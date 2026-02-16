@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+
+    
+    <title>
+         Bevy Systems: Gravity
+        
+    </title>
+
+    
+    <meta property="og:title"
+        content="Bevy Systems: Gravity" />
+    
+    
+
+    
+    
+    
+
+    
+    
+    
+
+    
+
+    
+
+    
+
+    
+    
+    <script src=https://blog.graysonhead.net/js/feather.min.js></script>
+    
+
+
+    
+    <link href=https://blog.graysonhead.net/css/fonts.css rel="stylesheet" />
+    
+
+    <link rel="stylesheet" type="text/css" media="screen" href=https://blog.graysonhead.net/css/main.css />
+
+    
+    <link rel="stylesheet" id="darkModeStyle" type="text/css" href=https://blog.graysonhead.net/css/dark.css   />
+    
+
+
+    
+
+
+</head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-CCTJX63WS9"></script>
+<script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    gtag('js', new Date());
+
+    gtag('config', 'G-CCTJX63WS9');
+</script>
+
+<body>
+    <div class="content">
+        <header>
+    <div class="main" id="main_title">
+        <a href=https:&#x2F;&#x2F;blog.graysonhead.net></a>
+    </div>
+
+    <nav>
+        
+            <a href=&#x2F;posts>&#x2F;posts</a>
+        
+            <a href=&#x2F;projects>&#x2F;projects</a>
+        
+            <a href=&#x2F;about>&#x2F;about</a>
+        
+
+        
+            |
+
+            
+                <a href=&#x2F;>en</a>
+            
+        
+
+        
+    </nav>
+</header>
+
+
+        
+    
+<main>
+    <article>
+        <div class="title">
+            <h1 class="title">Bevy Systems: Gravity</h1>
+            <div class="meta">
+                
+                on  2025-11-14
+
+                
+            </div>
+        </div>
+
+        
+
+        <section class="body">
+            <p><canvas id="bevy-demo"></canvas></p>
+<script type="module">
+    import init, { run_demo } from '../../wasm/gravity/demo/gravity_wasm.js';
+
+    async function run() {
+        try {
+            await init();
+            run_demo();
+            document.getElementById('loading').style.display = 'none';
+        } catch (e) {
+            console.error('Failed to load WASM:', e);
+            document.getElementById('loading').innerHTML = '<h2>Error loading simulation</h2><p>Please check the console for details.</p>';
+        }
+    }
+
+    run();
+</script>
+<p>I haven't had a lot of free time lately, but my desire to start a million projects I'll never finish has in no way diminished. I've been thinking about these projects during car rides, birthday parties, and those 3am wake-ups where I suddenly realize a better way to do something I haven't touched in 5 years.</p>
+<p>After watching <a href="https://www.youtube.com/watch?v=QPuIysZxXwM">Make Systems Not Games</a>, I decided to focus on building modular, reusable systems instead of complete game prototypes. This is one of those systems. It was quick to build. But only because I'd failed at it enough times before to know what problems I needed to solve. (And because Claude handled the easy parts, plus some hard parts with coaching.)</p>
+<h2 id="what-this-is">What This Is</h2>
+<p>This is an <strong>n-body gravity simulator</strong> for Bevy. Not the gravity you'd find in a physics engine like <a href="https://github.com/dimforge/rapier">Rapier</a>, but the kind you'd find in Kerbal Space Program or Universe Sandbox. The kind where you fly a spaceship around planets and have to reason about orbital mechanics and delta-v budgets like some kind of masochist who enjoys pain (or has a degree in aerospace engineering, or just played a lot of KSP).</p>
+<p>This post walks through three key challenges I had to solve:</p>
+<ol>
+<li><strong>Scale and Units</strong>: How do you simulate both planetary orbits and surface-level physics without floating-point errors destroying everything?</li>
+<li><strong>Integration Accuracy</strong>: How do you keep orbits stable over thousands of simulation steps without them decaying into chaos?</li>
+<li><strong>Time Acceleration</strong>: How do you speed up time 1000x without breaking the physics?</li>
+</ol>
+<p>There are limitations to doing this in realtime. Some of which I could fix with CUDA, but that would turn a 4-day project into a 4-week project. What's here is &quot;Good Enough&quot; for the scale I'm considering.</p>
+<p>Let's dive in.</p>
+<h2 id="challenge-1-scale-and-units">Challenge 1: Scale and Units</h2>
+<p>The first problem with gravity simulations is scale. You might want to simulate:</p>
+<ul>
+<li>Surface-level physics (meters and kilograms)</li>
+<li>Planetary systems (thousands of kilometers, Earth masses)</li>
+<li>Solar systems (astronomical units, solar masses)</li>
+</ul>
+<p>If you use real-world values directly, you'll end up with floating-point precision errors and numbers like <code>1.989e30</code> scattered throughout your code. The solution is a configurable unit system that lets you define what &quot;1 unit&quot; means in your simulation:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span>#[</span><span style="color:#bf616a;">derive</span><span>(Debug, Clone, Resource)]
+</span><span style="color:#b48ead;">pub struct </span><span>GravityConfig {
+</span><span>    </span><span style="color:#65737e;">/// Length scale defining how real-world distances map to game coordinates.
+</span><span>    </span><span style="color:#65737e;">///
+</span><span>    </span><span style="color:#65737e;">/// Examples:
+</span><span>    </span><span style="color:#65737e;">/// - `Length::from_meters(1.0)`: 1 Bevy unit = 1 meter (surface scale)
+</span><span>    </span><span style="color:#65737e;">/// - `Length::from_kilometers(1.0)`: 1 Bevy unit = 1 km (regional scale)
+</span><span>    </span><span style="color:#65737e;">/// - `Length::from_au(0.01)`: 1 Bevy unit = 0.01 AU (solar system scale)
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">length_scale</span><span>: Length,
+</span><span>
+</span><span>    </span><span style="color:#65737e;">/// Mass scale allowing scaling masses to avoid very large/small numbers.
+</span><span>    </span><span style="color:#65737e;">///
+</span><span>    </span><span style="color:#65737e;">/// Examples:
+</span><span>    </span><span style="color:#65737e;">/// - `Mass::from_kg(1.0)`: Mass values represent kilograms directly
+</span><span>    </span><span style="color:#65737e;">/// - `Mass::earth()`: Mass values represent Earth masses
+</span><span>    </span><span style="color:#65737e;">/// - `Mass::from_kg(1.989e30)`: Mass values represent Solar masses
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">mass_scale</span><span>: Mass,
+</span><span>
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl </span><span>GravityConfig {
+</span><span>    </span><span style="color:#65737e;">/// Configuration optimized for solar system simulations.
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">solar_system</span><span>() -&gt; </span><span style="color:#b48ead;">Self </span><span>{
+</span><span>        </span><span style="color:#b48ead;">Self </span><span>{
+</span><span>            length_scale: Length::from_au(</span><span style="color:#d08770;">0.01</span><span>),     </span><span style="color:#65737e;">// 0.01 AU per unit
+</span><span>            mass_scale: Mass::earth(),               </span><span style="color:#65737e;">// Earth masses
+</span><span>        }
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#65737e;">/// Configuration optimized for planetary system simulations (Earth-Moon scale).
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">planetary</span><span>() -&gt; </span><span style="color:#b48ead;">Self </span><span>{
+</span><span>        </span><span style="color:#b48ead;">Self </span><span>{
+</span><span>            length_scale: Length::from_kilometers(</span><span style="color:#d08770;">1000.0</span><span>), </span><span style="color:#65737e;">// 1000 km per unit
+</span><span>            mass_scale: Mass::earth(),                      </span><span style="color:#65737e;">// Earth masses
+</span><span>        }
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#65737e;">/// Configuration optimized for atmospheric and near-surface operations.
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">atmospheric</span><span>() -&gt; </span><span style="color:#b48ead;">Self </span><span>{
+</span><span>        </span><span style="color:#b48ead;">Self </span><span>{
+</span><span>            length_scale: Length::from_kilometers(</span><span style="color:#d08770;">1.0</span><span>),    </span><span style="color:#65737e;">// 1 km per unit
+</span><span>            mass_scale: Mass::earth(),                      </span><span style="color:#65737e;">// Earth masses
+</span><span>        }
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#65737e;">/// Configuration optimized for surface operations and small-scale physics.
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">surface</span><span>() -&gt; </span><span style="color:#b48ead;">Self </span><span>{
+</span><span>        </span><span style="color:#b48ead;">Self </span><span>{
+</span><span>            length_scale: Length::from_meters(</span><span style="color:#d08770;">1.0</span><span>),         </span><span style="color:#65737e;">// 1 meter per unit
+</span><span>            mass_scale: Mass::from_kg(</span><span style="color:#d08770;">1.0</span><span>),                 </span><span style="color:#65737e;">// 1 kg per unit
+</span><span>        }
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#65737e;">/// Get the effective gravitational constant for this scale configuration.
+</span><span>    </span><span style="color:#65737e;">///
+</span><span>    </span><span style="color:#65737e;">/// The gravitational constant is scaled according to the unit conversions:
+</span><span>    </span><span style="color:#65737e;">/// G_effective = G_real * (mass_scale) / (length_scale³)
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">gravitational_constant</span><span>(&amp;</span><span style="color:#bf616a;">self</span><span>) -&gt; </span><span style="color:#b48ead;">f32 </span><span>{
+</span><span>        </span><span style="color:#b48ead;">const </span><span style="color:#d08770;">G_SI</span><span>: </span><span style="color:#b48ead;">f32 </span><span>= </span><span style="color:#d08770;">6.674e-11</span><span>; </span><span style="color:#65737e;">// m³/(kg⋅s²)
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// Scale conversions for space and mass units
+</span><span>        </span><span style="color:#d08770;">G_SI </span><span>* </span><span style="color:#bf616a;">self</span><span>.mass_scale.</span><span style="color:#96b5b4;">kg</span><span>() / </span><span style="color:#bf616a;">self</span><span>.length_scale.</span><span style="color:#96b5b4;">meters</span><span>().</span><span style="color:#96b5b4;">powi</span><span>(</span><span style="color:#d08770;">3</span><span>)
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#65737e;">/// Convert a real-world distance (in meters) to Bevy units.
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">meters_to_units</span><span>(&amp;</span><span style="color:#bf616a;">self</span><span>, </span><span style="color:#bf616a;">meters</span><span>: </span><span style="color:#b48ead;">f32</span><span>) -&gt; </span><span style="color:#b48ead;">f32 </span><span>{
+</span><span>        meters / </span><span style="color:#bf616a;">self</span><span>.length_scale.</span><span style="color:#96b5b4;">meters</span><span>()
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#65737e;">/// Convert Bevy units to real-world distance (in meters).
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">units_to_meters</span><span>(&amp;</span><span style="color:#bf616a;">self</span><span>, </span><span style="color:#bf616a;">units</span><span>: </span><span style="color:#b48ead;">f32</span><span>) -&gt; </span><span style="color:#b48ead;">f32 </span><span>{
+</span><span>        units * </span><span style="color:#bf616a;">self</span><span>.length_scale.</span><span style="color:#96b5b4;">meters</span><span>()
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#65737e;">/// Convert a real-world mass (in kg) to simulation mass units.
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">kg_to_mass_units</span><span>(&amp;</span><span style="color:#bf616a;">self</span><span>, </span><span style="color:#bf616a;">kg</span><span>: </span><span style="color:#b48ead;">f32</span><span>) -&gt; </span><span style="color:#b48ead;">f32 </span><span>{
+</span><span>        kg / </span><span style="color:#bf616a;">self</span><span>.mass_scale.</span><span style="color:#96b5b4;">kg</span><span>()
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#65737e;">/// Convert simulation mass units to real-world mass (in kg).
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">mass_units_to_kg</span><span>(&amp;</span><span style="color:#bf616a;">self</span><span>, </span><span style="color:#bf616a;">mass_units</span><span>: </span><span style="color:#b48ead;">f32</span><span>) -&gt; </span><span style="color:#b48ead;">f32 </span><span>{
+</span><span>        mass_units * </span><span style="color:#bf616a;">self</span><span>.mass_scale.</span><span style="color:#96b5b4;">kg</span><span>()
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>This was the missing piece in my previous failed attempts. Different games need different scales; a full-scale solar system simulation with 1:1 timescale would be incredibly boring. This config lets you tune the simulation while preserving physical accuracy.</p>
+<p>I also wanted type-safe units throughout the simulation. The challenge is that Bevy's reflection system needs to understand these values. UOM's units don't implement <code>Reflect</code>, so I created wrapper components that convert between type-safe units and Bevy's internal representation.</p>
+<h3 id="components">Components</h3>
+<p>With the scale system in place, entities need three things:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span>#[</span><span style="color:#bf616a;">derive</span><span>(Reflect, Component, Default)]
+</span><span>#[</span><span style="color:#bf616a;">reflect</span><span>(Component)]
+</span><span style="color:#b48ead;">pub struct </span><span>CelestialBody {
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">velocity</span><span>: Vec3,
+</span><span>}
+</span><span>
+</span><span style="color:#65737e;">/// Marker component for bodies that should remain fixed in position.
+</span><span style="color:#65737e;">/// Pinned bodies are immune to gravitational forces but still exert gravitational influence on other bodies.
+</span><span>#[</span><span style="color:#bf616a;">derive</span><span>(Reflect, Component, Default)]
+</span><span>#[</span><span style="color:#bf616a;">reflect</span><span>(Component)]
+</span><span style="color:#b48ead;">pub struct </span><span>Pinned;
+</span><span>
+</span><span>
+</span><span style="color:#65737e;">/// Mass component with type-safe units that supports Bevy reflection.
+</span><span style="color:#65737e;">///
+</span><span style="color:#65737e;">/// This wraps the UOM Mass type to provide compile-time unit safety while
+</span><span style="color:#65737e;">/// maintaining compatibility with Bevy&#39;s reflection system.
+</span><span>#[</span><span style="color:#bf616a;">derive</span><span>(Component, Reflect, Clone, Debug)]
+</span><span>#[</span><span style="color:#bf616a;">reflect</span><span>(Component)]
+</span><span style="color:#b48ead;">pub struct </span><span>Mass {
+</span><span>    </span><span style="color:#65737e;">/// Raw mass value in kilograms (for reflection/serialization)
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">kilograms</span><span>: </span><span style="color:#b48ead;">f32</span><span>,
+</span><span>    </span><span style="color:#65737e;">/// Type-safe mass quantity (ignored by reflection to avoid UOM issues)
+</span><span>    #[</span><span style="color:#bf616a;">reflect</span><span>(ignore)]
+</span><span>    #[</span><span style="color:#bf616a;">allow</span><span>(dead_code)]
+</span><span>    </span><span style="color:#bf616a;">inner</span><span>: uom::si::f32::Mass,
+</span><span>}
+</span></code></pre>
+<p>Entities need a <code>CelestialBody</code> component to participate in gravity, a <code>Mass</code> to know how much gravitational influence they have, and optionally <code>Pinned</code> if they should stay fixed (like a sun that doesn't move but still pulls on planets).</p>
+<h2 id="challenge-2-integration-accuracy">Challenge 2: Integration Accuracy</h2>
+<p>Now for the tricky part: actually simulating orbits over time. The basic gravity calculation is straightforward:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">calculate_velocity_impact</span><span>(
+</span><span>    </span><span style="color:#bf616a;">our_transform</span><span>: &amp;GlobalTransform,
+</span><span>    </span><span style="color:#bf616a;">our_mass</span><span>: &amp;Mass,
+</span><span>    </span><span style="color:#bf616a;">other_transform</span><span>: &amp;GlobalTransform,
+</span><span>    </span><span style="color:#bf616a;">other_mass</span><span>: &amp;Mass,
+</span><span>    </span><span style="color:#bf616a;">time_step_secs</span><span>: </span><span style="color:#b48ead;">f32</span><span>,
+</span><span>) -&gt; Vec3 {
+</span><span>    </span><span style="color:#b48ead;">let</span><span> our_body_transform = our_transform.</span><span style="color:#96b5b4;">translation</span><span>();
+</span><span>    </span><span style="color:#b48ead;">let</span><span> other_body_transform = other_transform.</span><span style="color:#96b5b4;">translation</span><span>();
+</span><span>    </span><span style="color:#b48ead;">let</span><span> distance = our_body_transform.</span><span style="color:#96b5b4;">distance</span><span>(other_body_transform);
+</span><span>    </span><span style="color:#b48ead;">let</span><span> direction = (other_body_transform - our_body_transform).</span><span style="color:#96b5b4;">normalize</span><span>();
+</span><span>    </span><span style="color:#b48ead;">let</span><span> force_magnitude = </span><span style="color:#d08770;">GRAVITY </span><span>* (our_mass.mass * other_mass.mass) / distance.</span><span style="color:#96b5b4;">powi</span><span>(</span><span style="color:#d08770;">2</span><span>);
+</span><span>    </span><span style="color:#b48ead;">let</span><span> force = direction * force_magnitude;
+</span><span>    </span><span style="color:#b48ead;">let</span><span> acceleration = force / our_mass.mass;
+</span><span>    acceleration * time_step_secs
+</span><span>}
+</span></code></pre>
+<p>Then you need a system to move the object based on its velocity:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">update_position</span><span>(
+</span><span>    </span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">bodies</span><span>: Query&lt;(&amp;CelestialBody, &amp;</span><span style="color:#b48ead;">mut</span><span> Transform)&gt;,
+</span><span>    </span><span style="color:#bf616a;">time</span><span>: Res&lt;Time&gt;,
+</span><span>) {
+</span><span>    </span><span style="color:#b48ead;">for </span><span>(body, </span><span style="color:#b48ead;">mut</span><span> transform) in &amp;</span><span style="color:#b48ead;">mut</span><span> bodies {
+</span><span>        transform.translation -= body.velocity * time.</span><span style="color:#96b5b4;">delta_seconds</span><span>();
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>And this works. This would be the most naive way to do integration, known as Euler. Specifically Symplectic Euler (because we are figuring out our velocity, then applying it instead of the other way around). You will see objects orbit each other, but eventually all your orbits will degrade. We can figure this out by calculating the total energy (potential + kinetic) of the orbital system and plotting it over time. And the greater the time step, (how much time delta elapsed between each update) the worse the drift gets. </p>
+<p>To understand why timestep size matters so much with integration, let's use a simpler analogy.</p>
+<p>Imagine simulating a car. And lets say you have a system where you only update the velocity every second. Cars initially accelerate very fast, but their acceleration slows down as air resistance, gearing limitations, and power vs force relationship come into play. Now lets imagine you have two cars and you are going to have a drag race. Each car has the same acceleration curve, but one car's velocity will update every second, and the second car's velocity will update every two seconds. Which car will win? The second car, by a pretty non-trivial amount<sup class="footnote-reference"><a href="#1">1</a></sup>:</p>
+<img src="../../images/gravity/drag_race.png" alt="Plot of the position of both cars, showing car B ahead" />
+<p>And this is probably intuitive. The car that is calculating its velocity every 2 seconds is accelerating faster for longer. The calculations for its current acceleration aren't wrong, they just aren't happening in realtime.</p>
+<p>But, we can make our approximation a bit better. Lets try out a different integration strategy, known as leapfrog<sup class="footnote-reference"><a href="#2">2</a></sup>:</p>
+<img src="../../images/gravity/drag_race_2.png" alt="Plot of the position of all 4 cars, showing the two leapfrog integrated cars much closer to reality" />
+<p>It doesn't completely solve this whole time step and integration accuracy issue. It is a bit more accurate though. And it does entirely solve some other problems.</p>
+<p>The main benefit of leapfrog in the context of Gravitational approximations is that the integration errors don't accumulate like they do with Euler. You can see this on the graph by comparing Euler at dt=1s (blue dot) to Leapfrog at dt=1s. Even though they should be more or less identical, the Leapfrog integration is more conservative. You can see this more at dt=2s. And this effect would be greatly exaggerated at time steps that are an order of magnitude above that. It would also get worse the more steps you simulate.</p>
+<p>Another benefit: Leapfrog is <strong>reversible</strong>. Negate time and apply the same steps in reverse, and you'll get right back to where you started. This would be important if I were insane enough to implement this in a multiplayer game with rollback netcode. (I'm not, don't worry.)</p>
+<h3 id="implementing-leapfrog-for-gravity">Implementing Leapfrog for Gravity</h3>
+<p>Leapfrog integration works in two phases:</p>
+<ol>
+<li><strong>Kick</strong>: Update velocities using current positions: <code>v(t+dt/2) = v(t-dt/2) + a(t) * dt</code></li>
+<li><strong>Drift</strong>: Update positions using new velocities: <code>x(t+dt) = x(t) + v(t+dt/2) * dt</code></li>
+</ol>
+<p>The key is that positions and velocities are evaluated at <strong>staggered time points</strong>: positions at integer timesteps, velocities at half-timesteps. This leapfrogging is why it can conserve energy on average.</p>
+<p>The implementation is quite involved (took me a while to get the math right, and I'm still not 100% sure there aren't bugs). The high-level flow:</p>
+<ol>
+<li><strong>Snapshot positions</strong> - Capture all body positions at time <code>t</code> for consistent force calculations</li>
+<li><strong>Initialize on first run</strong> - Bootstrap velocities to half-timestep: <code>v(-dt/2) = v(0) - a(0) * dt/2</code></li>
+<li><strong>Kick phase</strong> - Update all velocities from <code>v(t-dt/2)</code> to <code>v(t+dt/2)</code> using forces at <code>x(t)</code></li>
+<li><strong>Drift phase</strong> - Update all positions from <code>x(t)</code> to <code>x(t+dt)</code> using new velocities</li>
+</ol>
+<p>The tricky part is the initialization step: Leapfrog needs velocities at half-timesteps, so on the first frame we do a half-step <em>backwards</em> to get <code>v(-dt/2)</code> from the initial <code>v(0)</code>.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#65737e;">/// Trait for integration methods
+</span><span style="color:#b48ead;">pub trait </span><span>Integrator {
+</span><span>    </span><span style="color:#65737e;">/// Perform a single integration step
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">integrate_step</span><span>(
+</span><span>        &amp;</span><span style="color:#bf616a;">self</span><span>,
+</span><span>        </span><span style="color:#bf616a;">bodies</span><span>: &amp;</span><span style="color:#b48ead;">mut </span><span>Query&lt;(Entity, &amp;</span><span style="color:#b48ead;">mut</span><span> CelestialBody, &amp;</span><span style="color:#b48ead;">mut</span><span> Transform, &amp;GlobalTransform)&gt;,
+</span><span>        </span><span style="color:#bf616a;">masses</span><span>: &amp;Query&lt;(Entity, &amp;Mass, &amp;GlobalTransform)&gt;,
+</span><span>        </span><span style="color:#bf616a;">pinned_bodies</span><span>: &amp;Query&lt;Entity, With&lt;Pinned&gt;&gt;,
+</span><span>        </span><span style="color:#bf616a;">config</span><span>: &amp;GravityConfig,
+</span><span>        </span><span style="color:#bf616a;">dt</span><span>: </span><span style="color:#b48ead;">f32</span><span>,
+</span><span>    );
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl </span><span>Integrator </span><span style="color:#b48ead;">for </span><span>Leapfrog {
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">integrate_step</span><span>(
+</span><span>        &amp;</span><span style="color:#bf616a;">self</span><span>,
+</span><span>        </span><span style="color:#bf616a;">bodies</span><span>: &amp;</span><span style="color:#b48ead;">mut </span><span>Query&lt;(Entity, &amp;</span><span style="color:#b48ead;">mut</span><span> CelestialBody, &amp;</span><span style="color:#b48ead;">mut</span><span> Transform, &amp;GlobalTransform)&gt;,
+</span><span>        </span><span style="color:#bf616a;">masses</span><span>: &amp;Query&lt;(Entity, &amp;Mass, &amp;GlobalTransform)&gt;,
+</span><span>        </span><span style="color:#bf616a;">pinned_bodies</span><span>: &amp;Query&lt;Entity, With&lt;Pinned&gt;&gt;,
+</span><span>        </span><span style="color:#bf616a;">config</span><span>: &amp;GravityConfig,
+</span><span>        </span><span style="color:#bf616a;">dt</span><span>: </span><span style="color:#b48ead;">f32</span><span>,
+</span><span>    ) {
+</span><span>        </span><span style="color:#65737e;">// ═══════════════════════════════════════════════════════════════════════════════
+</span><span>        </span><span style="color:#65737e;">// LEAPFROG INTEGRATION ALGORITHM
+</span><span>        </span><span style="color:#65737e;">// ═══════════════════════════════════════════════════════════════════════════════
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// The Leapfrog integrator is a second-order symplectic integration method that
+</span><span>        </span><span style="color:#65737e;">// preserves phase space volume and conserves energy over long time periods.
+</span><span>        </span><span style="color:#65737e;">// Unlike Euler or RK4, it maintains time-reversibility and stability.
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// Position and velocity are evaluated at staggered time points:
+</span><span>        </span><span style="color:#65737e;">//   - Positions x are evaluated at integer timesteps: t, t+dt, t+2dt, ...
+</span><span>        </span><span style="color:#65737e;">//   - Velocities v are evaluated at half-timesteps: t-dt/2, t+dt/2, t+3dt/2, ...
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// This &quot;leapfrogging&quot; of position and velocity gives the method its name and
+</span><span>        </span><span style="color:#65737e;">// its superior energy conservation properties.
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// ALGORITHM (Kick-Drift form):
+</span><span>        </span><span style="color:#65737e;">//   1. KICK:  v(t+dt/2) = v(t-dt/2) + a(t) * dt
+</span><span>        </span><span style="color:#65737e;">//   2. DRIFT: x(t+dt)   = x(t) + v(t+dt/2) * dt
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// Where:
+</span><span>        </span><span style="color:#65737e;">//   - a(t) is acceleration computed from gravitational forces at position x(t)
+</span><span>        </span><span style="color:#65737e;">//   - The &quot;kick&quot; updates velocity using the full timestep dt
+</span><span>        </span><span style="color:#65737e;">//   - The &quot;drift&quot; updates position using the newly updated velocity
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// ═══════════════════════════════════════════════════════════════════════════════
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// ───────────────────────────────────────────────────────────────────────────────
+</span><span>        </span><span style="color:#65737e;">// STEP 0: SNAPSHOT CURRENT POSITIONS
+</span><span>        </span><span style="color:#65737e;">// ───────────────────────────────────────────────────────────────────────────────
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// We need to compute accelerations at time t using positions x(t).
+</span><span>        </span><span style="color:#65737e;">// During the kick phase, we&#39;ll be mutably iterating over bodies to update
+</span><span>        </span><span style="color:#65737e;">// velocities.
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// This ensures all bodies use consistent, simultaneous positions when computing
+</span><span>        </span><span style="color:#65737e;">// gravitational forces, preventing inconsistencies in the force calculation.
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#b48ead;">let</span><span> body_positions: Vec&lt;(Entity, Vec3)&gt; = bodies
+</span><span>            .</span><span style="color:#96b5b4;">iter</span><span>()
+</span><span>            .</span><span style="color:#96b5b4;">map</span><span>(|(</span><span style="color:#bf616a;">entity</span><span>, _, </span><span style="color:#bf616a;">transform</span><span>, _)| (entity, transform.translation))
+</span><span>            .</span><span style="color:#96b5b4;">collect</span><span>();
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// ───────────────────────────────────────────────────────────────────────────────
+</span><span>        </span><span style="color:#65737e;">// INITIALIZATION PHASE (First Call Only)
+</span><span>        </span><span style="color:#65737e;">// ───────────────────────────────────────────────────────────────────────────────
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// When the simulation starts, we have:
+</span><span>        </span><span style="color:#65737e;">//   - Positions at time t=0: x(0)
+</span><span>        </span><span style="color:#65737e;">//   - Velocities at time t=0: v(0)
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// Leapfrog requires velocities at half-timesteps. Specifically, to start
+</span><span>        </span><span style="color:#65737e;">// the first full integration step, we need v(-dt/2) not v(0).
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// So, On the very first call, we apply a &quot;half-step backwards kick&quot; to convert
+</span><span>        </span><span style="color:#65737e;">// v(0) into v(-dt/2). This initialization ensures the staggered time grid
+</span><span>        </span><span style="color:#65737e;">// is properly established.
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// After initialization:
+</span><span>        </span><span style="color:#65737e;">//   - Positions remain at x(0)
+</span><span>        </span><span style="color:#65737e;">//   - Velocities are now at v(-dt/2)
+</span><span>        </span><span style="color:#65737e;">//   - Future steps will maintain this half-timestep offset
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// We return immediately after initialization to avoid doing a full integration
+</span><span>        </span><span style="color:#65737e;">// step in the same call. This ensures the user sees the correct initial state
+</span><span>        </span><span style="color:#65737e;">// and the first full step happens on the next call to integrate_step().
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// SAFETY: We access mutable static LEAPFROG_FIRST_RUN to track initialization state.
+</span><span>        </span><span style="color:#65737e;">// This is safe because Bevy&#39;s schedule runs systems sequentially in a single thread,
+</span><span>        </span><span style="color:#65737e;">// ensuring no concurrent access. The flag is only modified here and in reset_integrator_state().
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#b48ead;">unsafe </span><span>{
+</span><span>            </span><span style="color:#b48ead;">if </span><span style="color:#d08770;">LEAPFROG_FIRST_RUN </span><span>{
+</span><span>                </span><span style="color:#65737e;">// ─────────────────────────────────────────────────────────────────────
+</span><span>                </span><span style="color:#65737e;">// INITIALIZATION LOOP: Compute v(-dt/2) from v(0)
+</span><span>                </span><span style="color:#65737e;">// ─────────────────────────────────────────────────────────────────────
+</span><span>                </span><span style="color:#b48ead;">for </span><span>(entity, </span><span style="color:#b48ead;">mut</span><span> body, _transform, _global_transform) in bodies.</span><span style="color:#96b5b4;">iter_mut</span><span>() {
+</span><span>                    </span><span style="color:#65737e;">// Pinned bodies never move; enforce zero velocity
+</span><span>                    </span><span style="color:#b48ead;">if</span><span> pinned_bodies.</span><span style="color:#96b5b4;">contains</span><span>(entity) {
+</span><span>                        body.velocity = Vec3::</span><span style="color:#d08770;">ZERO</span><span>;
+</span><span>                        </span><span style="color:#b48ead;">continue</span><span>;
+</span><span>                    }
+</span><span>
+</span><span>                    </span><span style="color:#65737e;">// Retrieve this body&#39;s mass
+</span><span>                    </span><span style="color:#b48ead;">let</span><span> our_mass = </span><span style="color:#b48ead;">match</span><span> masses
+</span><span>                        .</span><span style="color:#96b5b4;">iter</span><span>()
+</span><span>                        .</span><span style="color:#96b5b4;">filter</span><span>(|(</span><span style="color:#bf616a;">iter_entity</span><span>, ..)| iter_entity == &amp;entity)
+</span><span>                        .</span><span style="color:#96b5b4;">map</span><span>(|(</span><span style="color:#bf616a;">_iter_entity</span><span>, </span><span style="color:#bf616a;">mass</span><span>, </span><span style="color:#bf616a;">_transform</span><span>)| mass)
+</span><span>                        .collect::&lt;Vec&lt;&amp;Mass&gt;&gt;()
+</span><span>                        .</span><span style="color:#96b5b4;">pop</span><span>()
+</span><span>                    {
+</span><span>                        Some(mass) =&gt; mass,
+</span><span>                        None =&gt; &amp;Mass::default(),
+</span><span>                    };
+</span><span>
+</span><span>                    </span><span style="color:#65737e;">// Retrieve this body&#39;s position from the snapshot
+</span><span>                    </span><span style="color:#b48ead;">let</span><span> our_position = body_positions.</span><span style="color:#96b5b4;">iter</span><span>()
+</span><span>                        .</span><span style="color:#96b5b4;">find</span><span>(|(</span><span style="color:#bf616a;">e</span><span>, _)| e == &amp;entity)
+</span><span>                        .</span><span style="color:#96b5b4;">map</span><span>(|(_, </span><span style="color:#bf616a;">pos</span><span>)| *pos)
+</span><span>                        .</span><span style="color:#96b5b4;">unwrap_or</span><span>(Vec3::</span><span style="color:#d08770;">ZERO</span><span>);
+</span><span>
+</span><span>                    </span><span style="color:#65737e;">// Compute acceleration from all other bodies at time t=0
+</span><span>                    </span><span style="color:#65737e;">// and apply a NEGATIVE half-timestep to move velocity backwards in time
+</span><span>                    </span><span style="color:#b48ead;">for </span><span>(other_entity, other_mass, _other_transform) in masses.</span><span style="color:#96b5b4;">iter</span><span>() {
+</span><span>                        </span><span style="color:#b48ead;">if</span><span> entity != other_entity {
+</span><span>                            </span><span style="color:#b48ead;">let</span><span> other_position = body_positions.</span><span style="color:#96b5b4;">iter</span><span>()
+</span><span>                                .</span><span style="color:#96b5b4;">find</span><span>(|(</span><span style="color:#bf616a;">e</span><span>, _)| e == &amp;other_entity)
+</span><span>                                .</span><span style="color:#96b5b4;">map</span><span>(|(_, </span><span style="color:#bf616a;">pos</span><span>)| *pos)
+</span><span>                                .</span><span style="color:#96b5b4;">unwrap_or</span><span>(Vec3::</span><span style="color:#d08770;">ZERO</span><span>);
+</span><span>
+</span><span>                            </span><span style="color:#65737e;">// Apply: v(-dt/2) = v(0) + a(0) * (-dt/2)
+</span><span>                            </span><span style="color:#65737e;">// The negative timestep is critical for backwards integration
+</span><span>                            body.velocity += </span><span style="color:#96b5b4;">calculate_velocity_impact_between_positions</span><span>(
+</span><span>                                config,
+</span><span>                                our_position,
+</span><span>                                our_mass,
+</span><span>                                other_position,
+</span><span>                                other_mass,
+</span><span>                                -dt * </span><span style="color:#d08770;">0.5</span><span>, </span><span style="color:#65737e;">// NEGATIVE half-timestep
+</span><span>                            );
+</span><span>                        }
+</span><span>                    }
+</span><span>                }
+</span><span>
+</span><span>                </span><span style="color:#65737e;">// Mark initialization complete; future calls will execute normal steps
+</span><span>                </span><span style="color:#d08770;">LEAPFROG_FIRST_RUN </span><span>= </span><span style="color:#d08770;">false</span><span>;
+</span><span>
+</span><span>                </span><span style="color:#65737e;">// Here, we return without performing a full integration step.
+</span><span>                </span><span style="color:#65737e;">// At this point we have:
+</span><span>                </span><span style="color:#65737e;">//   - x(0) (unchanged positions)
+</span><span>                </span><span style="color:#65737e;">//   - v(-dt/2) (initialized velocities)
+</span><span>                </span><span style="color:#65737e;">// The next call will perform the first full kick-drift cycle.
+</span><span>                </span><span style="color:#b48ead;">return</span><span>;
+</span><span>            }
+</span><span>        }
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// ═══════════════════════════════════════════════════════════════════════════════
+</span><span>        </span><span style="color:#65737e;">// MAIN INTEGRATION STEP (Kick-Drift)
+</span><span>        </span><span style="color:#65737e;">// ═══════════════════════════════════════════════════════════════════════════════
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// At entry to this section, we have:
+</span><span>        </span><span style="color:#65737e;">//   - Position at full timestep
+</span><span>        </span><span style="color:#65737e;">//   - Velocity at half-timestep
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// We will produce:
+</span><span>        </span><span style="color:#65737e;">//   - Position at next full timestep
+</span><span>        </span><span style="color:#65737e;">//   - Velocity at next half-timestep
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// ═══════════════════════════════════════════════════════════════════════════════
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// ───────────────────────────────────────────────────────────────────────────────
+</span><span>        </span><span style="color:#65737e;">// PHASE 1: KICK
+</span><span>        </span><span style="color:#65737e;">// ───────────────────────────────────────────────────────────────────────────────
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// Update velocities from v(t - dt/2) to v(t + dt/2)
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// WHERE:
+</span><span>        </span><span style="color:#65737e;">//   - a(t) is acceleration computed from gravitational forces at x(t)
+</span><span>        </span><span style="color:#65737e;">//   - We use the FULL timestep dt (not dt/2) because we&#39;re spanning from
+</span><span>        </span><span style="color:#65737e;">//     (t - dt/2) to (t + dt/2), which is a full timestep interval
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// We MUST compute velocities before updating positions because:
+</span><span>        </span><span style="color:#65737e;">//   1. Acceleration a(t) depends on positions x(t)
+</span><span>        </span><span style="color:#65737e;">//   2. If we updated positions first, we&#39;d have x(t+dt), invalidating a(t)
+</span><span>        </span><span style="color:#65737e;">//   3. The kick-drift order preserves the algorithm&#39;s symplectic structure
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// PHYSICAL INTERPRETATION:
+</span><span>        </span><span style="color:#65737e;">//   We&#39;re applying the gravitational force at the current positions to
+</span><span>        </span><span style="color:#65737e;">//   &quot;kick&quot; the velocities forward by a full timestep. This represents
+</span><span>        </span><span style="color:#65737e;">//   the momentum change due to forces acting over the interval.
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#b48ead;">for </span><span>(entity, </span><span style="color:#b48ead;">mut</span><span> body, _transform, _global_transform) in bodies.</span><span style="color:#96b5b4;">iter_mut</span><span>() {
+</span><span>            </span><span style="color:#65737e;">// Pinned bodies are immobile; enforce zero velocity
+</span><span>            </span><span style="color:#b48ead;">if</span><span> pinned_bodies.</span><span style="color:#96b5b4;">contains</span><span>(entity) {
+</span><span>                body.velocity = Vec3::</span><span style="color:#d08770;">ZERO</span><span>;
+</span><span>                </span><span style="color:#b48ead;">continue</span><span>;
+</span><span>            }
+</span><span>
+</span><span>            </span><span style="color:#65737e;">// Retrieve this body&#39;s mass
+</span><span>            </span><span style="color:#b48ead;">let</span><span> our_mass = </span><span style="color:#b48ead;">match</span><span> masses
+</span><span>                .</span><span style="color:#96b5b4;">iter</span><span>()
+</span><span>                .</span><span style="color:#96b5b4;">filter</span><span>(|(</span><span style="color:#bf616a;">iter_entity</span><span>, ..)| iter_entity == &amp;entity)
+</span><span>                .</span><span style="color:#96b5b4;">map</span><span>(|(</span><span style="color:#bf616a;">_iter_entity</span><span>, </span><span style="color:#bf616a;">mass</span><span>, </span><span style="color:#bf616a;">_transform</span><span>)| mass)
+</span><span>                .collect::&lt;Vec&lt;&amp;Mass&gt;&gt;()
+</span><span>                .</span><span style="color:#96b5b4;">pop</span><span>()
+</span><span>            {
+</span><span>                Some(mass) =&gt; mass,
+</span><span>                None =&gt; &amp;Mass::default(),
+</span><span>            };
+</span><span>
+</span><span>            </span><span style="color:#65737e;">// Retrieve this body&#39;s position from the snapshot at time t
+</span><span>            </span><span style="color:#b48ead;">let</span><span> our_position = body_positions.</span><span style="color:#96b5b4;">iter</span><span>()
+</span><span>                .</span><span style="color:#96b5b4;">find</span><span>(|(</span><span style="color:#bf616a;">e</span><span>, _)| e == &amp;entity)
+</span><span>                .</span><span style="color:#96b5b4;">map</span><span>(|(_, </span><span style="color:#bf616a;">pos</span><span>)| *pos)
+</span><span>                .</span><span style="color:#96b5b4;">unwrap_or</span><span>(Vec3::</span><span style="color:#d08770;">ZERO</span><span>);
+</span><span>
+</span><span>            </span><span style="color:#65737e;">// Accumulate gravitational acceleration from all other bodies
+</span><span>            </span><span style="color:#65737e;">// using positions at time t (from the snapshot)
+</span><span>            </span><span style="color:#b48ead;">for </span><span>(other_entity, other_mass, _other_transform) in masses.</span><span style="color:#96b5b4;">iter</span><span>() {
+</span><span>                </span><span style="color:#b48ead;">if</span><span> entity != other_entity {
+</span><span>                    </span><span style="color:#b48ead;">let</span><span> other_position = body_positions.</span><span style="color:#96b5b4;">iter</span><span>()
+</span><span>                        .</span><span style="color:#96b5b4;">find</span><span>(|(</span><span style="color:#bf616a;">e</span><span>, _)| e == &amp;other_entity)
+</span><span>                        .</span><span style="color:#96b5b4;">map</span><span>(|(_, </span><span style="color:#bf616a;">pos</span><span>)| *pos)
+</span><span>                        .</span><span style="color:#96b5b4;">unwrap_or</span><span>(Vec3::</span><span style="color:#d08770;">ZERO</span><span>);
+</span><span>
+</span><span>                    </span><span style="color:#65737e;">// Apply: v(t+dt/2) = v(t-dt/2) + a(t) * dt
+</span><span>                    </span><span style="color:#65737e;">// This function computes Δv = a * dt from gravitational force
+</span><span>                    body.velocity += </span><span style="color:#96b5b4;">calculate_velocity_impact_between_positions</span><span>(
+</span><span>                        config,
+</span><span>                        our_position,
+</span><span>                        our_mass,
+</span><span>                        other_position,
+</span><span>                        other_mass,
+</span><span>                        dt, </span><span style="color:#65737e;">// FULL timestep (not dt/2!)
+</span><span>                    );
+</span><span>                }
+</span><span>            }
+</span><span>        }
+</span><span>        </span><span style="color:#65737e;">// At this point:
+</span><span>        </span><span style="color:#65737e;">//   - Positions are still at x(t)
+</span><span>        </span><span style="color:#65737e;">//   - Velocities are now at v(t + dt/2)
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// ───────────────────────────────────────────────────────────────────────────────
+</span><span>        </span><span style="color:#65737e;">// PHASE 2: DRIFT
+</span><span>        </span><span style="color:#65737e;">// ───────────────────────────────────────────────────────────────────────────────
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">//   We use v(t + dt/2), which is the velocity at the MIDPOINT of the
+</span><span>        </span><span style="color:#65737e;">//   time interval
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">//   Using the midpoint velocity rather than v(t) or v(t+dt) is what gives
+</span><span>        </span><span style="color:#65737e;">//   Leapfrog its second-order accuracy and symplectic properties.
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">//   With the updated velocities from the kick phase, we &quot;drift&quot; the positions
+</span><span>        </span><span style="color:#65737e;">//   forward. This represents ballistic motion with the newly computed momentum.
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">//   We must update all velocities before updating any positions to maintain
+</span><span>        </span><span style="color:#65737e;">//   the symplectic structure. If we interleaved kick and drift for each body,
+</span><span>        </span><span style="color:#65737e;">//   we&#39;d break time-reversibility and lose energy conservation.
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#b48ead;">for </span><span>(entity, body, </span><span style="color:#b48ead;">mut</span><span> transform, _global_transform) in bodies.</span><span style="color:#96b5b4;">iter_mut</span><span>() {
+</span><span>            </span><span style="color:#65737e;">// Pinned bodies don&#39;t move; skip position update
+</span><span>            </span><span style="color:#b48ead;">if</span><span> pinned_bodies.</span><span style="color:#96b5b4;">contains</span><span>(entity) {
+</span><span>                </span><span style="color:#b48ead;">continue</span><span>;
+</span><span>            }
+</span><span>
+</span><span>            </span><span style="color:#65737e;">// Apply: x(t+dt) = x(t) + v(t+dt/2) * dt
+</span><span>            transform.translation += body.velocity * dt;
+</span><span>        }
+</span><span>
+</span><span>        </span><span style="color:#65737e;">// ═══════════════════════════════════════════════════════════════════════════════
+</span><span>        </span><span style="color:#65737e;">// POST-STEP STATE
+</span><span>        </span><span style="color:#65737e;">// ═══════════════════════════════════════════════════════════════════════════════
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// After this integration step, the system state is:
+</span><span>        </span><span style="color:#65737e;">//   - Positions are at x(t + dt)        [full timestep]
+</span><span>        </span><span style="color:#65737e;">//   - Velocities are at v(t + dt/2)     [half-timestep]
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// Note that v(t + dt/2) = v((t+dt) - dt/2), so the half-timestep offset
+</span><span>        </span><span style="color:#65737e;">// is preserved for the next iteration.
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// NEXT ITERATION:
+</span><span>        </span><span style="color:#65737e;">//   The next call will treat the current state as:
+</span><span>        </span><span style="color:#65737e;">//     x(t) ← x(t + dt)
+</span><span>        </span><span style="color:#65737e;">//     v(t - dt/2) ← v(t + dt/2)
+</span><span>        </span><span style="color:#65737e;">//   and perform another kick-drift cycle.
+</span><span>        </span><span style="color:#65737e;">//
+</span><span>        </span><span style="color:#65737e;">// ═══════════════════════════════════════════════════════════════════════════════
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<h3 id="energy-conservation-results">Energy Conservation Results</h3>
+<p>The proof is in the numbers. Running 100,000 simulation steps at 60Hz shows the difference. Pay particular attention to the <strong>Energy drift</strong> line in each result:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>Simulation configuration:
+</span><span>  Steps: 100000
+</span><span>  Timestep: 1/60 second (60Hz physics update)
+</span><span>  Total simulated time: 1666.7 seconds (27.78 minutes)
+</span><span>
+</span><span>Running simulation with Symplectic Euler integrator (1x)...
+</span><span>  Running 100000 updates at 1x speed (1 physics steps per update)...
+</span><span>  Physics step 10000: Energy = -8.166741e-7, Drift = +1.250555e-12 (+0.0002%)
+</span><span>  Physics step 20000: Energy = -8.166735e-7, Drift = +1.762146e-12 (+0.0002%)
+</span><span>  Physics step 30000: Energy = -8.166739e-7, Drift = +1.364242e-12 (+0.0002%)
+</span><span>  Physics step 40000: Energy = -8.166736e-7, Drift = +1.705303e-12 (+0.0002%)
+</span><span>  Physics step 50000: Energy = -8.166731e-7, Drift = +2.216893e-12 (+0.0003%)
+</span><span>  Physics step 60000: Energy = -8.166733e-7, Drift = +1.989520e-12 (+0.0002%)
+</span><span>  Physics step 70000: Energy = -8.166747e-7, Drift = +5.684342e-13 (+0.0001%)
+</span><span>  Physics step 80000: Energy = -8.166739e-7, Drift = +1.364242e-12 (+0.0002%)
+</span><span>  Physics step 90000: Energy = -8.166728e-7, Drift = +2.501110e-12 (+0.0003%)
+</span><span>  Physics step 100000: Energy = -8.166725e-7, Drift = +2.842171e-12 (+0.0003%)
+</span><span>
+</span><span>======================================================================
+</span><span>Symplectic Euler (1x speed) - Energy Conservation Statistics
+</span><span>======================================================================
+</span><span>Total physics steps: 100000
+</span><span>Energy samples: 100000
+</span><span>Initial energy: -8.166753e-7
+</span><span>Final energy:   -8.166722e-7
+</span><span>Energy drift:   3.126388e-12 (+0.0004%)
+</span><span>Energy range:   4.376943e-12 (0.0005%)
+</span><span>Min energy:     -8.166761e-7
+</span><span>Max energy:     -8.166717e-7
+</span><span>Std deviation:  5.339739e-12 (0.0007%)
+</span><span>======================================================================
+</span><span>
+</span><span>
+</span><span>Running simulation with Leapfrog integrator (1x)...
+</span><span>  Running 100000 updates at 1x speed (1 physics steps per update)...
+</span><span>  Physics step 10000: Energy = -8.166750e-7, Drift = +2.842171e-13 (+0.0000%)
+</span><span>  Physics step 20000: Energy = -8.166753e-7, Drift = +0.000000e0 (+0.0000%)
+</span><span>  Physics step 30000: Energy = -8.166757e-7, Drift = -3.410605e-13 (-0.0000%)
+</span><span>  Physics step 40000: Energy = -8.166762e-7, Drift = -9.094947e-13 (-0.0001%)
+</span><span>  Physics step 50000: Energy = -8.166758e-7, Drift = -4.547474e-13 (-0.0001%)
+</span><span>  Physics step 60000: Energy = -8.166767e-7, Drift = -1.364242e-12 (-0.0002%)
+</span><span>  Physics step 70000: Energy = -8.166754e-7, Drift = -1.136868e-13 (-0.0000%)
+</span><span>  Physics step 80000: Energy = -8.166760e-7, Drift = -7.389644e-13 (-0.0001%)
+</span><span>  Physics step 90000: Energy = -8.166757e-7, Drift = -3.979039e-13 (-0.0000%)
+</span><span>  Physics step 100000: Energy = -8.166747e-7, Drift = +5.684342e-13 (+0.0001%)
+</span><span>
+</span><span>======================================================================
+</span><span>Leapfrog (1x speed) - Energy Conservation Statistics
+</span><span>======================================================================
+</span><span>Total physics steps: 100000
+</span><span>Energy samples: 100000
+</span><span>Initial energy: -8.166753e-7
+</span><span>Final energy:   -8.166744e-7
+</span><span>Energy drift:   9.094947e-13 (+0.0001%)
+</span><span>Energy range:   3.922196e-12 (0.0005%)
+</span><span>Min energy:     -8.166778e-7
+</span><span>Max energy:     -8.166738e-7
+</span><span>Std deviation:  5.991950e-12 (0.0007%)
+</span><span>======================================================================
+</span></code></pre>
+<p><strong>Symplectic Euler</strong>: Energy drift of <strong>+0.0004%</strong> after 100,000 steps
+<strong>Leapfrog</strong>: Energy drift of <strong>+0.0001%</strong> after 100,000 steps</p>
+<p>Leapfrog conserves energy significantly better. And this is at 60Hz, the difference becomes dramatically larger with less frequent timesteps. At 10Hz or 1Hz (common for games that want to speed up time), Euler integration would show visible orbital decay while Leapfrog remains stable.</p>
+<h2 id="challenge-3-time-acceleration">Challenge 3: Time Acceleration</h2>
+<p>Watching orbits in real-time is pretty boring. </p>
+<p>But speeding up the simulation is not trivial. Normally if you wanted to do time acceleration in Bevy you would just do something like this:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">adjust_time_scale</span><span>(</span><span style="color:#bf616a;">keyboard</span><span>: Res&lt;ButtonInput&lt;KeyCode&gt;&gt;, </span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">time</span><span>: ResMut&lt;Time&lt;Virtual&gt;&gt;) {
+</span><span>    </span><span style="color:#b48ead;">if</span><span> keyboard.</span><span style="color:#96b5b4;">just_pressed</span><span>(KeyCode::ArrowUp) {
+</span><span>        time.</span><span style="color:#96b5b4;">set_relative_speed</span><span>(time.</span><span style="color:#96b5b4;">relative_speed</span><span>() * </span><span style="color:#d08770;">2.0</span><span>);
+</span><span>    }
+</span><span>    </span><span style="color:#b48ead;">if</span><span> keyboard.</span><span style="color:#96b5b4;">just_pressed</span><span>(KeyCode::ArrowDown) {
+</span><span>        time.</span><span style="color:#96b5b4;">set_relative_speed</span><span>(time.</span><span style="color:#96b5b4;">relative_speed</span><span>() * </span><span style="color:#d08770;">0.5</span><span>);
+</span><span>    }
+</span><span>    </span><span style="color:#b48ead;">if</span><span> keyboard.</span><span style="color:#96b5b4;">just_pressed</span><span>(KeyCode::Space) {
+</span><span>        time.</span><span style="color:#96b5b4;">set_relative_speed</span><span>(</span><span style="color:#d08770;">1.0</span><span>);
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>But this doesn't work for fixed-timestep gravity simulation. Here's why: if you set <code>relative_speed</code> to 2.0, Bevy's <code>FixedUpdate</code> still runs at 60Hz, but each step now represents twice as much time. Our gravity calculations would still run 60 times per second, but we'd be applying forces as if much more time had passed. This is the same problem as the car example: larger effective timesteps mean larger integration errors and unstable orbits.</p>
+<p>So to do that, we need to accumulate simulation frames when we accelerate time, and skip them when we decelerate time. </p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#65737e;">/// Resource for controlling simulation time scaling.
+</span><span style="color:#65737e;">///
+</span><span style="color:#65737e;">/// Supports both time acceleration (for interplanetary travel) and deceleration
+</span><span style="color:#65737e;">/// (for precision maneuvers) while maintaining physics accuracy through multi-stepping.
+</span><span>#[</span><span style="color:#bf616a;">derive</span><span>(Resource, Debug, Clone)]
+</span><span style="color:#b48ead;">pub struct </span><span>TimeScale {
+</span><span>    </span><span style="color:#65737e;">/// Current time multiplier (1.0 = normal speed, 2.0 = 2x speed, 0.5 = half speed)
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">scale</span><span>: </span><span style="color:#b48ead;">f32</span><span>,
+</span><span>    </span><span style="color:#65737e;">/// Whether the simulation is currently paused
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">paused</span><span>: </span><span style="color:#b48ead;">bool</span><span>,
+</span><span>    </span><span style="color:#65737e;">/// Accumulated fractional steps for sub-1x speeds
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">step_accumulator</span><span>: </span><span style="color:#b48ead;">f32</span><span>,
+</span><span>    </span><span style="color:#65737e;">/// Maximum allowed time scale to prevent performance issues
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">max_scale</span><span>: </span><span style="color:#b48ead;">f32</span><span>,
+</span><span>    </span><span style="color:#65737e;">/// Minimum allowed time scale
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">min_scale</span><span>: </span><span style="color:#b48ead;">f32</span><span>,
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl </span><span>Default </span><span style="color:#b48ead;">for </span><span>TimeScale {
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">default</span><span>() -&gt; </span><span style="color:#b48ead;">Self </span><span>{
+</span><span>        </span><span style="color:#b48ead;">Self </span><span>{
+</span><span>            scale: </span><span style="color:#d08770;">1.0</span><span>,
+</span><span>            paused: </span><span style="color:#d08770;">false</span><span>,
+</span><span>            step_accumulator: </span><span style="color:#d08770;">0.0</span><span>,
+</span><span>            max_scale: </span><span style="color:#d08770;">1000.0</span><span>,
+</span><span>            min_scale: </span><span style="color:#d08770;">0.1</span><span>,
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">impl </span><span>TimeScale {
+</span><span>    </span><span style="color:#65737e;">/// Create a new TimeScale with custom limits
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">new</span><span>(</span><span style="color:#bf616a;">min_scale</span><span>: </span><span style="color:#b48ead;">f32</span><span>, </span><span style="color:#bf616a;">max_scale</span><span>: </span><span style="color:#b48ead;">f32</span><span>) -&gt; </span><span style="color:#b48ead;">Self </span><span>{
+</span><span>        </span><span style="color:#b48ead;">Self </span><span>{
+</span><span>            min_scale,
+</span><span>            max_scale,
+</span><span>            ..Default::default()
+</span><span>        }
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#65737e;">/// Set the time scale, clamping to valid range
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">set_scale</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>, </span><span style="color:#bf616a;">scale</span><span>: </span><span style="color:#b48ead;">f32</span><span>) {
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.scale = scale.</span><span style="color:#96b5b4;">clamp</span><span>(</span><span style="color:#bf616a;">self</span><span>.min_scale, </span><span style="color:#bf616a;">self</span><span>.max_scale);
+</span><span>        </span><span style="color:#bf616a;">self</span><span>.step_accumulator = </span><span style="color:#d08770;">0.0</span><span>; </span><span style="color:#65737e;">// Reset accumulator when scale changes
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#65737e;">/// Calculate how many physics steps to run this frame
+</span><span>    </span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">calculate_physics_steps</span><span>(&amp;</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">self</span><span>) -&gt; </span><span style="color:#b48ead;">u32 </span><span>{
+</span><span>        </span><span style="color:#b48ead;">let</span><span> effective_scale = </span><span style="color:#bf616a;">self</span><span>.</span><span style="color:#96b5b4;">effective_scale</span><span>();
+</span><span>
+</span><span>        </span><span style="color:#b48ead;">if</span><span> effective_scale &lt;= </span><span style="color:#d08770;">0.0 </span><span>{
+</span><span>            </span><span style="color:#b48ead;">return </span><span style="color:#d08770;">0</span><span>; </span><span style="color:#65737e;">// Paused
+</span><span>        }
+</span><span>
+</span><span>        </span><span style="color:#b48ead;">if</span><span> effective_scale &gt;= </span><span style="color:#d08770;">1.0 </span><span>{
+</span><span>            </span><span style="color:#65737e;">// For speeds &gt;= 1x, run multiple steps per frame
+</span><span>            effective_scale.</span><span style="color:#96b5b4;">floor</span><span>() as </span><span style="color:#b48ead;">u32
+</span><span>        } </span><span style="color:#b48ead;">else </span><span>{
+</span><span>            </span><span style="color:#65737e;">// For speeds &lt; 1x, accumulate fractional steps
+</span><span>            </span><span style="color:#bf616a;">self</span><span>.step_accumulator += effective_scale;
+</span><span>            </span><span style="color:#b48ead;">if </span><span style="color:#bf616a;">self</span><span>.step_accumulator &gt;= </span><span style="color:#d08770;">1.0 </span><span>{
+</span><span>                </span><span style="color:#bf616a;">self</span><span>.step_accumulator -= </span><span style="color:#d08770;">1.0</span><span>;
+</span><span>                </span><span style="color:#d08770;">1
+</span><span>            } </span><span style="color:#b48ead;">else </span><span>{
+</span><span>                </span><span style="color:#d08770;">0
+</span><span>            }
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>And this brings us conveniently back to the actual system that controls all of the physics, where these steps are actually run:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#65737e;">/// Physics update system that performs gravity integration using the configured integrator
+</span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">update_physics</span><span>(
+</span><span>    </span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">bodies</span><span>: Query&lt;(Entity, &amp;</span><span style="color:#b48ead;">mut</span><span> CelestialBody, &amp;</span><span style="color:#b48ead;">mut</span><span> Transform, &amp;GlobalTransform)&gt;,
+</span><span>    </span><span style="color:#bf616a;">masses</span><span>: Query&lt;(Entity, &amp;Mass, &amp;GlobalTransform)&gt;,
+</span><span>    </span><span style="color:#bf616a;">pinned_bodies</span><span>: Query&lt;Entity, With&lt;Pinned&gt;&gt;,
+</span><span>    </span><span style="color:#bf616a;">time</span><span>: Res&lt;Time&lt;Fixed&gt;&gt;,
+</span><span>    </span><span style="color:#bf616a;">config</span><span>: Res&lt;GravityConfig&gt;,
+</span><span>    </span><span style="color:#bf616a;">integrator_config</span><span>: Res&lt;IntegratorConfig&gt;,
+</span><span>    </span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">time_scale</span><span>: ResMut&lt;TimeScale&gt;,
+</span><span>) {
+</span><span>    </span><span style="color:#65737e;">// Calculate how many physics steps to run this frame based on time scale
+</span><span>    </span><span style="color:#b48ead;">let</span><span> steps_to_run = time_scale.</span><span style="color:#96b5b4;">calculate_physics_steps</span><span>();
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">if</span><span> steps_to_run == </span><span style="color:#d08770;">0 </span><span>{
+</span><span>        </span><span style="color:#b48ead;">return</span><span>; </span><span style="color:#65737e;">// Paused or no steps needed this frame
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// Use fixed timestep for all calculations to maintain determinism
+</span><span>    </span><span style="color:#b48ead;">let</span><span> dt = time.</span><span style="color:#96b5b4;">delta_secs</span><span>();
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// Run multiple physics steps for time acceleration
+</span><span>    </span><span style="color:#b48ead;">for</span><span> _step in </span><span style="color:#d08770;">0</span><span>..steps_to_run {
+</span><span>        integrators::perform_integration_step(
+</span><span>            integrator_config.method,
+</span><span>            &amp;</span><span style="color:#b48ead;">mut</span><span> bodies,
+</span><span>            &amp;masses,
+</span><span>            &amp;pinned_bodies,
+</span><span>            &amp;config,
+</span><span>            dt,
+</span><span>        );
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>And very importantly, this system <em>must</em> be run at a fixed update:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">impl </span><span>Plugin </span><span style="color:#b48ead;">for </span><span>CelestialBodyPlugin {
+</span><span>    </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">build</span><span>(&amp;</span><span style="color:#bf616a;">self</span><span>, </span><span style="color:#bf616a;">app</span><span>: &amp;</span><span style="color:#b48ead;">mut</span><span> App) {
+</span><span>        app.</span><span style="color:#96b5b4;">insert_resource</span><span>(</span><span style="color:#bf616a;">self</span><span>.config.</span><span style="color:#96b5b4;">clone</span><span>())
+</span><span>            .</span><span style="color:#96b5b4;">insert_resource</span><span>(PathPredictionConfig::default())
+</span><span>            .</span><span style="color:#96b5b4;">insert_resource</span><span>(TimeScale::default())
+</span><span>            .</span><span style="color:#96b5b4;">insert_resource</span><span>(</span><span style="color:#bf616a;">self</span><span>.integrator_config.</span><span style="color:#96b5b4;">clone</span><span>())
+</span><span>            .register_type::&lt;CelestialBody&gt;()
+</span><span>            .register_type::&lt;Mass&gt;()
+</span><span>            .register_type::&lt;Length&gt;()
+</span><span>            .register_type::&lt;TimeInterval&gt;()
+</span><span>            .register_type::&lt;Pinned&gt;()
+</span><span>            .register_type::&lt;PathPrediction&gt;()
+</span><span>            .register_type::&lt;IntegratorConfig&gt;()
+</span><span>            .register_type::&lt;IntegratorType&gt;()
+</span><span>            .</span><span style="color:#96b5b4;">add_systems</span><span>(FixedUpdate, update_physics) </span><span style="color:#65737e;">// &lt;- Here
+</span><span>            .</span><span style="color:#96b5b4;">add_systems</span><span>(Update, (
+</span><span>                path_prediction::predict_paths,
+</span><span>                path_prediction::update_path_visualizations,
+</span><span>                path_prediction::cleanup_path_visualizations,
+</span><span>            ).</span><span style="color:#96b5b4;">chain</span><span>());
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>And that covers the core mechanics.</p>
+<h2 id="putting-it-all-together">Putting It All Together</h2>
+<p>Here's a minimal example showing how to use the plugin:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">use </span><span>bevy::prelude::*;
+</span><span style="color:#b48ead;">use </span><span>bevy_gravity::*;
+</span><span>
+</span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">main</span><span>() {
+</span><span>    App::new()
+</span><span>        </span><span style="color:#65737e;">// Set black background
+</span><span>        .</span><span style="color:#96b5b4;">insert_resource</span><span>(ClearColor(Color::</span><span style="color:#d08770;">BLACK</span><span>))
+</span><span>        </span><span style="color:#65737e;">// Add default Bevy plugins with window config
+</span><span>        .</span><span style="color:#96b5b4;">add_plugins</span><span>(DefaultPlugins.</span><span style="color:#96b5b4;">set</span><span>(WindowPlugin {
+</span><span>            primary_window: Some(Window {
+</span><span>                title: &quot;</span><span style="color:#a3be8c;">Minimal Two Body Orbit</span><span>&quot;.</span><span style="color:#96b5b4;">into</span><span>(),
+</span><span>                resolution: (</span><span style="color:#d08770;">1200</span><span>, </span><span style="color:#d08770;">800</span><span>).</span><span style="color:#96b5b4;">into</span><span>(),
+</span><span>                ..</span><span style="color:#96b5b4;">default</span><span>()
+</span><span>            }),
+</span><span>            ..</span><span style="color:#96b5b4;">default</span><span>()
+</span><span>        }))
+</span><span>        </span><span style="color:#65737e;">// Add gravity simulation plugin with scale settings
+</span><span>        </span><span style="color:#65737e;">// 1 unit = 1000 km, masses measured in Earth masses
+</span><span>        .</span><span style="color:#96b5b4;">add_plugins</span><span>(CelestialBodyPlugin {
+</span><span>            config: GravityConfig {
+</span><span>                length_scale: Length::from_kilometers(</span><span style="color:#d08770;">1000.0</span><span>),
+</span><span>                mass_scale: Mass::earth(),
+</span><span>            },
+</span><span>            ..</span><span style="color:#96b5b4;">default</span><span>()
+</span><span>        })
+</span><span>        </span><span style="color:#65737e;">// Configure orbital path prediction
+</span><span>        </span><span style="color:#65737e;">// This draws the predicted orbit paths for each body
+</span><span>        .</span><span style="color:#96b5b4;">insert_resource</span><span>(PathPredictionConfig {
+</span><span>            prediction_steps: </span><span style="color:#d08770;">100000</span><span>,
+</span><span>            prediction_timestep: TimeInterval::from_seconds(</span><span style="color:#d08770;">1.0 </span><span>/ </span><span style="color:#d08770;">60.0</span><span>),
+</span><span>            enabled: </span><span style="color:#d08770;">true</span><span>,
+</span><span>            auto_disable_threshold: None,
+</span><span>        })
+</span><span>        </span><span style="color:#65737e;">// Set time acceleration to 10x speed
+</span><span>        .</span><span style="color:#96b5b4;">insert_resource</span><span>(TimeScale {
+</span><span>            scale: </span><span style="color:#d08770;">10.0</span><span>,
+</span><span>            ..Default::default()
+</span><span>        })
+</span><span>        </span><span style="color:#65737e;">// Run setup functions on startup
+</span><span>        .</span><span style="color:#96b5b4;">add_systems</span><span>(Startup, (spawn_camera, spawn_scene))
+</span><span>        .</span><span style="color:#96b5b4;">run</span><span>();
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">spawn_camera</span><span>(</span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">commands</span><span>: Commands) {
+</span><span>    </span><span style="color:#65737e;">// Camera positioned above the scene looking down at the orbital plane
+</span><span>    commands.</span><span style="color:#96b5b4;">spawn</span><span>((
+</span><span>        Camera3d::default(),
+</span><span>        Transform::from_xyz(</span><span style="color:#d08770;">0.0</span><span>, </span><span style="color:#d08770;">8.0</span><span>, </span><span style="color:#d08770;">0.0</span><span>).</span><span style="color:#96b5b4;">looking_at</span><span>(Vec3::</span><span style="color:#d08770;">ZERO</span><span>, Vec3::Z),
+</span><span>    ));
+</span><span>}
+</span><span>
+</span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">spawn_scene</span><span>(
+</span><span>    </span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">commands</span><span>: Commands,
+</span><span>    </span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">meshes</span><span>: ResMut&lt;Assets&lt;Mesh&gt;&gt;,
+</span><span>    </span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">materials</span><span>: ResMut&lt;Assets&lt;StandardMaterial&gt;&gt;,
+</span><span>    </span><span style="color:#bf616a;">config</span><span>: Res&lt;GravityConfig&gt;,
+</span><span>) {
+</span><span>    </span><span style="color:#65737e;">// Add a light source so we can see the spheres
+</span><span>    commands.</span><span style="color:#96b5b4;">spawn</span><span>((
+</span><span>        PointLight {
+</span><span>            intensity: </span><span style="color:#d08770;">1500.0</span><span>,
+</span><span>            shadows_enabled: </span><span style="color:#d08770;">true</span><span>,
+</span><span>            ..</span><span style="color:#96b5b4;">default</span><span>()
+</span><span>        },
+</span><span>        Transform::from_xyz(</span><span style="color:#d08770;">4.0</span><span>, </span><span style="color:#d08770;">8.0</span><span>, </span><span style="color:#d08770;">4.0</span><span>),
+</span><span>    ));
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// Create the central body at the origin
+</span><span>    </span><span style="color:#65737e;">// This is a blue sphere with Earth&#39;s mass that stays stationary
+</span><span>    </span><span style="color:#b48ead;">let</span><span> central_mass = Mass::earth();
+</span><span>    commands.</span><span style="color:#96b5b4;">spawn</span><span>((
+</span><span>        Mesh3d(meshes.</span><span style="color:#96b5b4;">add</span><span>(Sphere::new(</span><span style="color:#d08770;">0.4</span><span>))),
+</span><span>        MeshMaterial3d(materials.</span><span style="color:#96b5b4;">add</span><span>(StandardMaterial {
+</span><span>            base_color: Color::srgb(</span><span style="color:#d08770;">0.3</span><span>, </span><span style="color:#d08770;">0.7</span><span>, </span><span style="color:#d08770;">1.0</span><span>),
+</span><span>            ..</span><span style="color:#96b5b4;">default</span><span>()
+</span><span>        })),
+</span><span>        Transform::from_xyz(</span><span style="color:#d08770;">0.0</span><span>, </span><span style="color:#d08770;">0.0</span><span>, </span><span style="color:#d08770;">0.0</span><span>),
+</span><span>        central_mass.</span><span style="color:#96b5b4;">clone</span><span>(),
+</span><span>        CelestialBody {
+</span><span>            velocity: Vec3::</span><span style="color:#d08770;">ZERO</span><span>,
+</span><span>        },
+</span><span>        PathPrediction {
+</span><span>            display_path: </span><span style="color:#d08770;">true</span><span>,
+</span><span>            path_color: Color::srgb(</span><span style="color:#d08770;">0.0</span><span>, </span><span style="color:#d08770;">1.0</span><span>, </span><span style="color:#d08770;">0.0</span><span>),
+</span><span>            max_display_points: </span><span style="color:#d08770;">1000000</span><span>,
+</span><span>        },
+</span><span>    ));
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// Create the orbiting body
+</span><span>    </span><span style="color:#65737e;">// Position it 1 unit away from center (1000 km in real space)
+</span><span>    </span><span style="color:#b48ead;">let</span><span> orbital_position = Vec3::new(</span><span style="color:#d08770;">1.0</span><span>, </span><span style="color:#d08770;">0.0</span><span>, </span><span style="color:#d08770;">0.0</span><span>);
+</span><span>    </span><span style="color:#65737e;">// Orbit rotates around the Y axis (so orbit happens in the XZ plane)
+</span><span>    </span><span style="color:#b48ead;">let</span><span> orbit_axis = Vec3::Y;
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// Calculate the exact velocity needed for a stable circular orbit
+</span><span>    </span><span style="color:#65737e;">// This takes into account the central mass and distance
+</span><span>    </span><span style="color:#b48ead;">let</span><span> orbital_velocity = </span><span style="color:#96b5b4;">calculate_orbital_velocity_vector</span><span>(
+</span><span>        &amp;config,
+</span><span>        &amp;central_mass,
+</span><span>        orbital_position,
+</span><span>        orbit_axis,
+</span><span>    );
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// Spawn the orbiting body as a gray sphere with the calculated velocity
+</span><span>    commands.</span><span style="color:#96b5b4;">spawn</span><span>((
+</span><span>        Mesh3d(meshes.</span><span style="color:#96b5b4;">add</span><span>(Sphere::new(</span><span style="color:#d08770;">0.15</span><span>))),
+</span><span>        MeshMaterial3d(materials.</span><span style="color:#96b5b4;">add</span><span>(StandardMaterial {
+</span><span>            base_color: Color::srgb(</span><span style="color:#d08770;">0.8</span><span>, </span><span style="color:#d08770;">0.8</span><span>, </span><span style="color:#d08770;">0.7</span><span>),
+</span><span>            ..</span><span style="color:#96b5b4;">default</span><span>()
+</span><span>        })),
+</span><span>        Transform::from_translation(orbital_position),
+</span><span>        Mass::from_kg(1e15),
+</span><span>        CelestialBody {
+</span><span>            velocity: orbital_velocity,
+</span><span>        },
+</span><span>        PathPrediction {
+</span><span>            display_path: </span><span style="color:#d08770;">true</span><span>,
+</span><span>            path_color: Color::srgb(</span><span style="color:#d08770;">1.0</span><span>, </span><span style="color:#d08770;">1.0</span><span>, </span><span style="color:#d08770;">0.0</span><span>),
+</span><span>            max_display_points: </span><span style="color:#d08770;">1000000</span><span>,
+</span><span>        },
+</span><span>    ));
+</span><span>}
+</span></code></pre>
+<h2 id="interactive-demo">Interactive Demo</h2>
+<p>Check out an interactive demo <a href="../../projects/bevy-gravity/">here</a></p>
+<h1 id="future-plans-and-actual-usage">Future Plans, and Actual Usage</h1>
+<p>So, is all this practical for a real game? To be honest, probably not.</p>
+<p>It's probably not practical to have <em>every single entity</em> participate in the n-body simulations. For one, having to predict the path of a bunch of other objects that are all subject to n-body physics themselves requires subjecting yourself to a lot of brute-force calculations (which is what the current path prediction does). The next time I pick this up, I'll probably create a <code>PinnedOrbit</code> component, where a given entity can find a stable orbit around a <code>Pinned</code> entity, calculate a realistic orbit, and then just follow that path on rails for the rest of eternity. This would make sense for a game involving space craft with realistic orbital physics. In a stable orbital system, the orbits of the planets are not meaningfully going to change, and the mass of all the spacecraft zipping around aren't going to meaningfully affect the trajectory of the planets due to the astronomical mass disparity. Calculating all that out would just be a waste of CPU cycles. </p>
+<p>But this does lay the groundwork for having to realistically navigate a solar system with real gravity in some kind of craft, which was the main goal anyways. </p>
+<p>Other practical considerations are that even with being able to set the &quot;scale&quot; of the gravity simulation via the config, there are probably still going to be situations where floating point errors arise. But I think this is something that could be solved with things the way they currently are. You might have a gravity system with all planets when the player entity is out in the middle of nowhere, and then transparently switch to a low orbit scale when the player entity is approaching a station for instance. With any game at a scale like this, some kind of <a href="https://netherlands3d.eu/docs/developers/features/floating-origin/">floating origin</a> shenanigans are probably going to be necessary anyway. Extending that concept to the scale of the gravity situation probably makes sense. </p>
+<p>So having a bunch of fixed planets in fixed orbits, but subjecting the actual player entity (or entities) to n-body physics is much more reasonable. It's transparent from a gameplay perspective, and much better optimized from a resource perspective.</p>
+<p>Check out the repo and examples <a href="https://github.com/graysonhead/bevy-gravity">here</a> if you'd like to give it a spin.</p>
+<div class="footnote-definition" id="1"><sup class="footnote-definition-label">1</sup>
+<p><a href="https://gist.github.com/graysonhead/224810ebb92fe532444b56a45899d4eb">Python implementation of Euler integration</a></p>
+</div>
+<div class="footnote-definition" id="2"><sup class="footnote-definition-label">2</sup>
+<p><a href="https://gist.github.com/graysonhead/afe5a20716d910b9ad2e1a47ae47d022">Python implementation of Leapfrog integration</a></p>
+</div>
+
+        </section>
+
+        
+            <div class="post-tags">
+                <nav class="nav tags">
+                    <ul class="tags">
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/rust/>Rust</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/bevy/>Bevy</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/gamedev/>Gamedev</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/gravity/>Gravity</a></li>
+                        
+                    </ul>
+                </nav>
+            </div>
+        
+
+    </article>
+</main>
+
+
+
+        <footer>
+	<div style="display:flex">
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;github.com&#x2F;graysonhead title=GitHub>
+	         <i data-feather=github></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;hachyderm.io&#x2F;@Darkside title=Mastadon>
+	         <i data-feather=globe></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;www.linkedin.com&#x2F;in&#x2F;graysonhead&#x2F; title=LinkedIn>
+	         <i data-feather=linkedin></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;pixel.tchncs.de&#x2F;i&#x2F;web title=PixelFed>
+	         <i data-feather=camera></i>
+	     </a>
+	 
+	 </div>
+	 <div class="footer-info">
+	 2026 © Grayson Head
+        </div>
+</footer>
+
+
+<script>
+	    feather.replace();
+</script>
+
+
+    </div>
+</body>
+
+</html>

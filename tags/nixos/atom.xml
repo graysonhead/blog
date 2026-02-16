@@ -1,0 +1,503 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <title> - NixOS</title>
+    <link href="https://blog.graysonhead.net/tags/nixos/atom.xml" rel="self" type="application/atom+xml"/>
+    <link href="https://blog.graysonhead.net"/>
+    <generator uri="https://www.getzola.org/">Zola</generator>
+    <updated>2023-09-23T00:00:00+00:00</updated>
+    <id>https://blog.graysonhead.net/tags/nixos/atom.xml</id>
+    <entry xml:lang="en">
+        <title>Is Nix Worth The Hype?</title>
+        <published>2023-09-23T00:00:00+00:00</published>
+        <updated>2023-09-23T00:00:00+00:00</updated>
+        <author>
+          <name>Unknown</name>
+        </author>
+        <link rel="alternate" href="https://blog.graysonhead.net/posts/nixos-hype/" type="text/html"/>
+        <id>https://blog.graysonhead.net/posts/nixos-hype/</id>
+        
+        <content type="html">&lt;p&gt;Sometimes something comes along that legitimately disrupts the software&#x2F;IT industry. Some examples that come to mind are Ansible, Docker, Kubernetes, etc. But far more often, projects and products come along that make exaggerated claims of being revolutionary, only to die an unceremonious death.&lt;&#x2F;p&gt;
+&lt;p&gt;At a certian point it becomes clear to everyone who the winners and the losers are. But by that time they are always so far along their journey of marketplace dominance that the job market is saturated by experts and anyone getting on board is on the laggard side of the adoption curve. &lt;&#x2F;p&gt;
+&lt;p&gt;One thing is clear; &lt;a href=&quot;https:&#x2F;&#x2F;nixos.org&#x2F;&quot;&gt;Nix&lt;&#x2F;a&gt; isn&#x27;t there yet. But will it ever be? Is it worth your valuable time learning about it now?&lt;&#x2F;p&gt;
+&lt;h1 id=&quot;disambiguating-nix&quot;&gt;Disambiguating Nix&lt;&#x2F;h1&gt;
+&lt;p&gt;Its important to make a distinction between Nix: the package manager, and NixOS: the linux distribution that uses the Nix package manager. And then, to make things extra confusing, you also have Nix: the domain specific language. I&#x27;ll forgive you being confused because I&#x27;ll be referring to the package manager and the language interchangeably. &lt;&#x2F;p&gt;
+&lt;p&gt;In truth, it won&#x27;t affect the conclusions of this post because what I want to evaluate the viability of the ecosystem of Nix, which includes all of the aforementioned components. How do these things all add up? Do they really make managing software and systems easier? Or is it just another useless layer of abstraction?&lt;&#x2F;p&gt;
+&lt;h1 id=&quot;the-promise-of-panacea&quot;&gt;The Promise of Panacea&lt;&#x2F;h1&gt;
+&lt;p&gt;Looking back to when I learned ansible, I remember being filled with its promise. I was still working for a company that largely managed servers like pets (because everyone did in those days except for the rare hyper-scale exceptions.) I remember thinking that Ansible was going to revolutionize the way I provisoined machines, and in all honesty it did. It solved a lot of problems, but more importantly, it changed my mindset on how large herds of computers should be managed.&lt;&#x2F;p&gt;
+&lt;p&gt;Ansible had a lot of shortcomings though, for instance, while it tried very hard to be declarative it was still very much operating on an imperative CLI or against imperative APIs. While most of the core plugins were idempotent (you can run them multiple times and it won&#x27;t mess things up if the system is already in the correct state), there was no functional way of forcing plugin developers to write idempotent plugins. As a result, as you left the officially blessed core plugins, you entered a wild west where side effects and unexpected behavior were more and more likely. &lt;&#x2F;p&gt;
+&lt;p&gt;Ansible was a very important step in improving the way provisioning worked, but it wasn&#x27;t a panacea. &lt;&#x2F;p&gt;
+&lt;p&gt;Docker was another huge step forward for the industry. It has very minimal scripts (Dockerfiles) that allow you to build an image that can be deployed on systems that contained their own environments. It solved a lot of traditional problems that came from running in the shared library environment of traditional Linux. It made traditionally hard-to-deploy applications much easier.&lt;&#x2F;p&gt;
+&lt;p&gt;But this introduced a new class of problems. From tried and true build scripts to fragile Dockerfiles that were often vulnerable to bitrot. Additionally relying on a user defined label instead of a hash by default (don&#x27;t even get me started on the &lt;code&gt;latest&lt;&#x2F;code&gt; tag) led to a lot of potential security issues, and performance problems and bugs that were difficult to debug (why are half of my application servers crashing when they are all running the same version?) Additionally IO and Network issues are commonplace, and vulnerability fixes (meltdown and spectre specifically) resulted in a lot of strange performance bugs inside of containers.&lt;&#x2F;p&gt;
+&lt;p&gt;Docker was another huge step, but again, far from a panacea.&lt;&#x2F;p&gt;
+&lt;h1 id=&quot;what-problems-does-nix-actually-solve&quot;&gt;What Problems Does Nix Actually Solve?&lt;&#x2F;h1&gt;
+&lt;p&gt;The Nix ecosystem is capable of deterministically and repeatably building software, and entire operating systems (including their configuration). It puts guard rails (isolated sandboxes and source control) in place to ensure that the same inputs &lt;em&gt;always&lt;&#x2F;em&gt; deliver the same outputs. In short, the same inputs will always give you (bit for bit) the same output. &lt;&#x2F;p&gt;
+&lt;p&gt;Why is this important?&lt;&#x2F;p&gt;
+&lt;p&gt;Firstly, it allows you to build software fearlessly. The same inputs will always produce the same outputs, so if you build something 10 different times on 10 different computers (assuming they run the same architecture), you get the same bit-for-bit result 10 times, even if you build the last one several years apart. This allows you to do fun things like building binaries, uploading them to a shared cache, and then transparently substituting the output when the input hash matches. This means your install process is identical to your build process, which gives you immense flexibility. You don&#x27;t &lt;em&gt;need&lt;&#x2F;em&gt; a CI&#x2F;CD pipeline to build artifacts and then worry about deploying those artifacts to your servers. You can absolutely have a CI&#x2F;CD pipeline that warms up a cache so you don&#x27;t build binaries on your application servers, but this is completely optional (you should still have one though, at least for tests.) &lt;&#x2F;p&gt;
+&lt;p&gt;Secondly, it allows you to deterministically build operating systems. If you deploy 10 different servers from the same source, you will get the exact same server with the exact same behavior 10 times. Even if you build them several years apart. This completely eliminates a lot of the problems associated with imperative management schemes (for example, deploying something imperatively on a OS and then deploying something on a slightly newer OS which can result in wildly different performance due to library or OS tuning differences.) In other words, if you fix a problem once, you have inherently fixed it everywhere without having to worry about how to idempotently deploy that fix. Every single time you rebuild the system to deploy a change, you get a brand new fresh operating system (or as Nix calls them, a generation.)&lt;&#x2F;p&gt;
+&lt;p&gt;Putting all this together, what it means is that you can have a single repository (or several interconnected ones) that completely describes your server and build environment. And if you need to rebuild your entire environment a year from now, you will get the exact same environment.&lt;&#x2F;p&gt;
+&lt;p&gt;Additionally, there are other benefits as well which I&#x27;m glossing over, such as the ability to deterministically roll back to a previous state in the case of a failed upgrade, and having an immense amount of flexibility regarding your deployment style. Being able to push (deploy-rs) and pull (rebuild against a Nix Flake in a git repo) in the same repo without configuration changes makes for a very nice workflow of allowing rapid iteration while also being extremely scalable.&lt;&#x2F;p&gt;
+&lt;p&gt;I&#x27;d also like to stress that deterministically building entire operating systems without any kind of heavy handed image cloning &lt;em&gt;is a novel thing&lt;&#x2F;em&gt;. It hasn&#x27;t really been done before, and it can&#x27;t really be done without making some of the ground-up design choices that NixOS made (such as abandoning &lt;a href=&quot;https:&#x2F;&#x2F;refspecs.linuxfoundation.org&#x2F;FHS_3.0&#x2F;fhs&#x2F;index.html&quot;&gt;FHS&lt;&#x2F;a&gt; in favor of the nix store.)&lt;&#x2F;p&gt;
+&lt;h1 id=&quot;what-price-do-you-pay-for-the-upsides&quot;&gt;What Price Do You Pay For The Upsides?&lt;&#x2F;h1&gt;
+&lt;p&gt;I&#x27;m gonna spoil the conclusion, Nix isn&#x27;t a panacea either.&lt;&#x2F;p&gt;
+&lt;p&gt;Nix as a language can be a real drag. It isn&#x27;t because it is designed badly. It solves a very specific set of problems, and as a result has a specific set of conventions that may not be obvious or ergonomic to even seasoned developers&#x2F;operations folk. This is doubly true if they have never used a purely functional language before.&lt;&#x2F;p&gt;
+&lt;p&gt;To compound these issues, Nix doesn&#x27;t really lend itself to toy examples or programs. Its a language to describe configurations, so the only thing you really can do with it is make packages and operating systems. As a result, the minimal viable example for most things is as complex as building a package. The simpler examples don&#x27;t really teach you anything, and the complexity ramp is quite drastic in many cases.&lt;&#x2F;p&gt;
+&lt;p&gt;The last thing any software engineer wants is to be instructed to learn a language they don&#x27;t care about, and most software engineers don&#x27;t appear give two hoots about packaging. So twisting the arm of any reasonably large organization, especially one with multiple development teams, to start packaging with Nix is going to be quite difficult unless there are a lot of developers already inclined to explore it.&lt;&#x2F;p&gt;
+&lt;p&gt;This is especially true for NixOS adoption specifically, because excluding strategies like running Docker images or VMs on a NixOS box, you need your software and all of its dependencies packaged in Nix in order to deploy and orchestrate things.&lt;&#x2F;p&gt;
+&lt;p&gt;I really can&#x27;t overstate how big this hurdle is.&lt;&#x2F;p&gt;
+&lt;h1 id=&quot;what-is-missing&quot;&gt;What Is Missing?&lt;&#x2F;h1&gt;
+&lt;p&gt;My opinion is, there are three big things needed to bridge the gap:&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;documentation&quot;&gt;Documentation&lt;&#x2F;h2&gt;
+&lt;p&gt;The state of Nix documentation is pretty bad.&lt;&#x2F;p&gt;
+&lt;p&gt;The two main sources are the &lt;a href=&quot;https:&#x2F;&#x2F;nixos.org&#x2F;manual&#x2F;nix&#x2F;stable&#x2F;&quot;&gt;Nix Manual&lt;&#x2F;a&gt; and the &lt;a href=&quot;https:&#x2F;&#x2F;nixos.org&#x2F;manual&#x2F;nixos&#x2F;stable&#x2F;&quot;&gt;NixOS manual&lt;&#x2F;a&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;There is an ideal ratio of time spent writing code to time spent writing documentation. No one knows what it actually is, but most people intuitively know when it isn&#x27;t followed. However in the case of Nix it isn&#x27;t so clear. There is, in fact, a &lt;em&gt;lot&lt;&#x2F;em&gt; of documentation. Its just that most of it isn&#x27;t easy to follow. The documentation reads extremely terse, almost like an RFC or standards document. It seems to assume that the reader already groks the theoretical models of Nix and are looking for specific information. &lt;&#x2F;p&gt;
+&lt;p&gt;For a reference manual, this would be fine. But for a guide meant to introduce new users, its just going to make people feel stupid and by extension piss them off. It lacks any kind of narrative. It spends an awful lot of time &lt;em&gt;describing&lt;&#x2F;em&gt; how things work, and no time &lt;em&gt;showing&lt;&#x2F;em&gt; how it works. The lack of examples in what should be the first stop for new users is a huge problem. &lt;&#x2F;p&gt;
+&lt;h2 id=&quot;standardized-practices&quot;&gt;Standardized Practices&lt;&#x2F;h2&gt;
+&lt;p&gt;One of Nix&#x27;s biggest strengths is its flexibility. You can do a lot of creative things with packaging and systems configuration that are straight up not possible in alternative systems. However, this has a huge drawback: A total lack of standardization between different users and organizations.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;a href=&quot;https:&#x2F;&#x2F;nixos.wiki&#x2F;wiki&#x2F;Flakes&quot;&gt;Flakes&lt;&#x2F;a&gt; have made some strides in resolving this. Having a standardized input and output set that can be consumed by other Flakes does make collaborative Nix usage a lot more predictable. But anything made before the advent of flakes has a bit of &amp;quot;wild west&amp;quot; feel to it; you never really know how it works until you go read the source.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;minified-examples&quot;&gt;Minified Examples&lt;&#x2F;h2&gt;
+&lt;p&gt;Searching for minified examples of how to do X is difficult when it comes to Nix. I&#x27;m honestly not sure why this is, but it is something that I&#x27;ve heard countless colleagues complain about. I myself have run into this dozens of time. How do you include a configuration module in a Flake? How do you change the source of an application using its overrides attribute? How do you combine the result of two build outputs? None of these things are hard in Nix, but figuring out how to do them in the first place is difficult. It usually requires stumbling around in the source code of Nixpkgs or random Flakes until you finally run into what you are trying to do and see how someone else did it. Very few examples exist alone in isolation. &lt;&#x2F;p&gt;
+&lt;h1 id=&quot;the-state-of-modern-nix-and-its-users&quot;&gt;The State of Modern Nix and Its Users&lt;&#x2F;h1&gt;
+&lt;p&gt;Nix has been around since 2003, which is ages in the technology world. This might lead a lot of people to believe that its missed the boat on mass adoption. However, my personal feelings is that before the advent of Nix Flakes, Nix was a novel concept with no practical use outside of a Hobbyist OS. &lt;&#x2F;p&gt;
+&lt;p&gt;For the record Nix Flakes were introduced in 2021 as experimental, and have not yet been marked as stable. However, I think you&#x27;d be foolish to try and introduce Nix to a new organization without Flakes. Flakes make Nix composable, and a declaratively built operating system using deterministically constructed software composed from multiple federated repositories is the secret sauce of Nix as an ecosystem. It allows you to define your &lt;em&gt;entire&lt;&#x2F;em&gt; infrastructure in Git (which isn&#x27;t novel), and be able to rebuild it over and over again and get the exact same results every time (which is novel.)&lt;&#x2F;p&gt;
+&lt;p&gt;So, considering the relative new-ness of flakes, I&#x27;d say modern nix is still very much in the early adopter quadrant of the adoption curve, and it is far from dead in the water.&lt;&#x2F;p&gt;
+&lt;p&gt;While I give &amp;quot;old&amp;quot; Nix a lot of crap, Nixpkgs (the monorepo) has a &lt;em&gt;ton&lt;&#x2F;em&gt; of software in it. And it all stays pretty well up to date, at least all the less obscure stuff. You are not often going to run into the situation where a package available for Ubuntu or Centos isn&#x27;t available in Nix. And since the build process for packages doesn&#x27;t bit rot, keeping packages up to date is often a lot easier than it is with traditional distributions as the amount of work a maintainer needs to exert is far greatly reduced once the initial package is defined.&lt;&#x2F;p&gt;
+&lt;p&gt;Functionally re-creating a basic server in Nix using common open source technologies is easy bordering on trivial, once you figure out the &lt;code&gt;nixos-rebuild&lt;&#x2F;code&gt; workflow. It doesn&#x27;t require you to write much Nix at all. This is true up until the point where you start packaging your own software. At that point, you have to package your software (as well as any missing dependencies.) In organizations with lots of in-house software this can be a lot of work&lt;&#x2F;p&gt;
+&lt;h1 id=&quot;is-it-worth-using-now&quot;&gt;Is It Worth Using Now?&lt;&#x2F;h1&gt;
+&lt;p&gt;I have firsthand knowledge of a few companies that either already adopted or are well on their way to adopting Nix as an ecosystem. All of them have encountered some of the problems listed above, and in most cases there does need to be some organic interest within the engineering organization to get efforts off of the ground. &lt;&#x2F;p&gt;
+&lt;p&gt;But, with that being said, the benefits are clear. Package reproducibility and all of its many positive side effects seem to legitimately eliminate a large swathe of problems that relate to fragile build processes. Using Nix to replace your traditional build pipeline in my experience typically means that you get to trust it. Which isn&#x27;t something I&#x27;d typically say of a more traditional pipeline, especially if Groovy scripts or Dockerfiles are involved. &lt;&#x2F;p&gt;
+&lt;p&gt;Furthermore, using Nix to manage your systems has the benefit of your systems being far more consistent than they could be with other deployment mechanisms. At least, not without investing far more effort than would be reasonable. And when you fix a problem, it typically stays fixed. &lt;&#x2F;p&gt;
+&lt;p&gt;If Nix has a theme I imagine it is something along the lines of: &amp;quot;investing a bit more effort in your up-front setup can save you a lot more effort chasing problems later&amp;quot;. For me, the answer is clear; the tradeoff is well worth it.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>Nix Powered Dev Environments: Rust + Bevy</title>
+        <published>2023-06-20T00:00:00+00:00</published>
+        <updated>2023-06-20T00:00:00+00:00</updated>
+        <author>
+          <name>Unknown</name>
+        </author>
+        <link rel="alternate" href="https://blog.graysonhead.net/posts/nix-flake-rust-bevy/" type="text/html"/>
+        <id>https://blog.graysonhead.net/posts/nix-flake-rust-bevy/</id>
+        
+        <content type="html">&lt;p&gt;As with many things Nix, the result was simple and reliably repeatable, but getting there took a lot of throwing stuff at the wall. Currently my small allotment of game development time is focused on Rust, and more specifically Bevy; so if you aren&#x27;t interested in that combination this post may not be much help to you.&lt;&#x2F;p&gt;
+&lt;p&gt;If you want to just take my word for it and download a template, I&#x27;ll save you some time:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;nix flake new --template github:graysonhead&#x2F;nix-templates#rust-bevy .&#x2F;new_directory_here
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;This should get you a mostly out of the box &amp;quot;hello world&amp;quot; 3d scene running on bevy 0.10. At least, it should work out of the box on NixOS. For non NixOS, keep reading.&lt;&#x2F;p&gt;
+&lt;p&gt;For posterity, here are the two most important parts:&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;code&gt;flake.nix&lt;&#x2F;code&gt;&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;nix&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-nix &quot;&gt;&lt;code class=&quot;language-nix&quot; data-lang=&quot;nix&quot;&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;  &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;inputs &lt;&#x2F;span&gt;&lt;span&gt;= {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;flake-utils&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;url &lt;&#x2F;span&gt;&lt;span&gt;= &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;github:numtide&#x2F;flake-utils&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;naersk&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;url &lt;&#x2F;span&gt;&lt;span&gt;= &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;github:nix-community&#x2F;naersk&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;rust-overlay&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;url &lt;&#x2F;span&gt;&lt;span&gt;= &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;github:oxalica&#x2F;rust-overlay&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;nixpkgs&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;url &lt;&#x2F;span&gt;&lt;span&gt;= &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;github:NixOS&#x2F;nixpkgs&#x2F;nixpkgs-unstable&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;;
+&lt;&#x2F;span&gt;&lt;span&gt;  };
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;  &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;outputs &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;{ &lt;&#x2F;span&gt;&lt;span&gt;self, flake-utils, naersk, nixpkgs, rust-overlay &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;}&lt;&#x2F;span&gt;&lt;span&gt;:
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;flake-utils&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;lib&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;eachDefaultSystem &lt;&#x2F;span&gt;&lt;span&gt;(system:
+&lt;&#x2F;span&gt;&lt;span&gt;      &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;overlays &lt;&#x2F;span&gt;&lt;span&gt;= [ (&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;import &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;rust-overlay&lt;&#x2F;span&gt;&lt;span&gt;) ];
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;pkgs &lt;&#x2F;span&gt;&lt;span&gt;= (&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;import &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;nixpkgs&lt;&#x2F;span&gt;&lt;span&gt;) {
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;inherit &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;system overlays&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;        };
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;naersk&amp;#39; &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pkgs&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;callPackage naersk &lt;&#x2F;span&gt;&lt;span&gt;{ };
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;buildInputs &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;with &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pkgs&lt;&#x2F;span&gt;&lt;span&gt;; [
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;vulkan-loader
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;xorg&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;libXcursor
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;xorg&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;libXi
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;xorg&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;libXrandr
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;alsa-lib
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;udev
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pkg-config
+&lt;&#x2F;span&gt;&lt;span&gt;        ];
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;nativeBuildInputs &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;with &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pkgs&lt;&#x2F;span&gt;&lt;span&gt;; [
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;libxkbcommon
+&lt;&#x2F;span&gt;&lt;span&gt;          (&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;rust-bin&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;selectLatestNightlyWith
+&lt;&#x2F;span&gt;&lt;span&gt;            (toolchain: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;toolchain&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;default&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;override &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;              &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;extensions &lt;&#x2F;span&gt;&lt;span&gt;= [ &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;rust-src&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot; &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;clippy&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot; ];
+&lt;&#x2F;span&gt;&lt;span&gt;            }))
+&lt;&#x2F;span&gt;&lt;span&gt;        ];
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;all_deps &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;with &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pkgs&lt;&#x2F;span&gt;&lt;span&gt;; [
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;cargo-flamegraph
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;cargo-expand
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;nixpkgs-fmt
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;cmake
+&lt;&#x2F;span&gt;&lt;span&gt;        ] ++ &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;buildInputs &lt;&#x2F;span&gt;&lt;span&gt;++ &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;nativeBuildInputs&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;      &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;in
+&lt;&#x2F;span&gt;&lt;span&gt;      &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;rec &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# For `nix build` &amp;amp; `nix run`:
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;defaultPackage &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;packages&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;bevy_template&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;packages &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;rec &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;bevy_template &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;naersk&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;buildPackage &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;src &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;.&#x2F;.&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;nativeBuildInputs &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;nativeBuildInputs&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;buildInputs &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;buildInputs&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;postInstall &lt;&#x2F;span&gt;&lt;span&gt;= &amp;#39;&amp;#39;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;              cp -r assets $out&#x2F;bin&#x2F;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;            &lt;&#x2F;span&gt;&lt;span&gt;&amp;#39;&amp;#39;;
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# Disables dynamic linking when building with Nix
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;cargoBuildOptions &lt;&#x2F;span&gt;&lt;span&gt;= x: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;x &lt;&#x2F;span&gt;&lt;span&gt;++ [ &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;--no-default-features&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot; ];
+&lt;&#x2F;span&gt;&lt;span&gt;          };
+&lt;&#x2F;span&gt;&lt;span&gt;        };
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# For `nix develop`:
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;devShell &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pkgs&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;mkShell &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;nativeBuildInputs &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;all_deps&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;shellHook &lt;&#x2F;span&gt;&lt;span&gt;= &amp;#39;&amp;#39;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;            export CARGO_MANIFEST_DIR=$(pwd)
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;            export LD_LIBRARY_PATH=&amp;quot;$LD_LIBRARY_PATH:&lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#ab7967;&quot;&gt;${&lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#bf616a;&quot;&gt;pkgs&lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#c0c5ce;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#bf616a;&quot;&gt;lib&lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#c0c5ce;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#bf616a;&quot;&gt;makeLibraryPath all_deps&lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#ab7967;&quot;&gt;}&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;&amp;quot;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;          &lt;&#x2F;span&gt;&lt;span&gt;&amp;#39;&amp;#39;;
+&lt;&#x2F;span&gt;&lt;span&gt;        };
+&lt;&#x2F;span&gt;&lt;span&gt;      }
+&lt;&#x2F;span&gt;&lt;span&gt;    );
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;code&gt;cargo.toml&lt;&#x2F;code&gt;&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;toml&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-toml &quot;&gt;&lt;code class=&quot;language-toml&quot; data-lang=&quot;toml&quot;&gt;&lt;span&gt;[package]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;name &lt;&#x2F;span&gt;&lt;span&gt;= &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;bevy_template&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;version &lt;&#x2F;span&gt;&lt;span&gt;= &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;0.1.0&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;edition &lt;&#x2F;span&gt;&lt;span&gt;= &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;2021&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# See more keys and their definitions at https:&#x2F;&#x2F;doc.rust-lang.org&#x2F;cargo&#x2F;reference&#x2F;manifest.html
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;[dependencies]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;bevy &lt;&#x2F;span&gt;&lt;span&gt;= { &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;package &lt;&#x2F;span&gt;&lt;span&gt;= &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;bevy&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;version &lt;&#x2F;span&gt;&lt;span&gt;= &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;0.13.2&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot; }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;[profile.dev]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;opt-level &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;[profile.dev.package.&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;*&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;opt-level &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;3
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;[features]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;default &lt;&#x2F;span&gt;&lt;span&gt;= [&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;bevy&#x2F;dynamic_linking&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;]
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Going first over the &lt;code&gt;cargo.toml&lt;&#x2F;code&gt;, you will note that I&#x27;m following the advice of the &lt;a href=&quot;https:&#x2F;&#x2F;bevy-cheatbook.github.io&#x2F;pitfalls&#x2F;performance.html&quot;&gt;Unofficial Bevy Cheat Book&lt;&#x2F;a&gt;. &lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;toml&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-toml &quot;&gt;&lt;code class=&quot;language-toml&quot; data-lang=&quot;toml&quot;&gt;&lt;span&gt;[profile.dev]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;opt-level &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;[profile.dev.package.&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;*&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;opt-level &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;3
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;By setting the profile.dev to opt-level 1 and dev.package.&amp;quot;*&amp;quot; to opt-level 3, you get a great compromise of compile times (as the code you are changing is at an optimization level of 1), but all the dependencies you are using (such as bevy itself) is at optimization level 3. In some cases, you may still run into performance issues, in which case you should increase the profile.dev opt level, or alternatively just compile in release mode.&lt;&#x2F;p&gt;
+&lt;p&gt;Speaking of which, &lt;code&gt;nix build&lt;&#x2F;code&gt; will always compile in release mode.&lt;&#x2F;p&gt;
+&lt;p&gt;Now, if you really want to get the compile times down, you will enable the &lt;code&gt;dynamic_linking&lt;&#x2F;code&gt; (formerly known as &lt;code&gt;dynamic&lt;&#x2F;code&gt; in pre 0.10 releases of Bevy). However, this prevents &lt;code&gt;nix build&lt;&#x2F;code&gt; or &lt;code&gt;nix run&lt;&#x2F;code&gt; from working, because dynamic linking in Nix is...odd. At least in regards to Rust.&lt;&#x2F;p&gt;
+&lt;p&gt;So, to combat this, I made this rather counter-intuitive addition to the Cargo manifest:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;toml&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-toml &quot;&gt;&lt;code class=&quot;language-toml&quot; data-lang=&quot;toml&quot;&gt;&lt;span&gt;[dependencies]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;bevy &lt;&#x2F;span&gt;&lt;span&gt;= { &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;package &lt;&#x2F;span&gt;&lt;span&gt;= &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;bevy&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;version &lt;&#x2F;span&gt;&lt;span&gt;= &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;0.10.1&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;}
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;[features]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;default &lt;&#x2F;span&gt;&lt;span&gt;= [&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;bevy&#x2F;dynamic_linking&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;]
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;So, by default if you run &lt;code&gt;cargo build&lt;&#x2F;code&gt; or &lt;code&gt;cargo run&lt;&#x2F;code&gt;, you will get very fast compile times thanks to dynamic linking, however once you build the derivation in release mode using nix, it won&#x27;t use dynamic linking (and will actually work as a result.)&lt;&#x2F;p&gt;
+&lt;p&gt;The &lt;code&gt;cargoBuildOptions&lt;&#x2F;code&gt; line in the flake governs that behavior:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;nix&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-nix &quot;&gt;&lt;code class=&quot;language-nix&quot; data-lang=&quot;nix&quot;&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;packages &lt;&#x2F;span&gt;&lt;span style=&quot;background-color:#bf616a;color:#2b303b;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;rec &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;bevy_template &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;naersk&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;buildPackage &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;src &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;.&#x2F;.&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;nativeBuildInputs &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;nativeBuildInputs&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;buildInputs &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;buildInputs&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;postInstall &lt;&#x2F;span&gt;&lt;span&gt;= &amp;#39;&amp;#39;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;        cp -r assets $out&#x2F;bin&#x2F;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;    &lt;&#x2F;span&gt;&lt;span&gt;&amp;#39;&amp;#39;;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# Disables dynamic linking when building with Nix
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;cargoBuildOptions &lt;&#x2F;span&gt;&lt;span&gt;= x: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;x &lt;&#x2F;span&gt;&lt;span&gt;++ [ &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;--no-default-features&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot; ];
+&lt;&#x2F;span&gt;&lt;span&gt;    };
+&lt;&#x2F;span&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;span style=&quot;background-color:#bf616a;color:#2b303b;&quot;&gt;;&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;In addition, the &lt;code&gt;postInstall&lt;&#x2F;code&gt; line ensures that any game assets are copied to the correct directory. &lt;&#x2F;p&gt;
+&lt;p&gt;So, you get the best of both worlds more or less. Consistent development environments using Flakes, fast compile times using cargo, and statically linked outputs using nix.&lt;&#x2F;p&gt;
+&lt;h1 id=&quot;non-nixos-systems&quot;&gt;Non NixOS Systems&lt;&#x2F;h1&gt;
+&lt;p&gt;If you want to run this example using Nix on a non-NixOS system, you will need an extra step. Since your graphics drivers are most likely not available in the Nix store, you will need to employ a wrapper to make them available. &lt;&#x2F;p&gt;
+&lt;p&gt;The best one I&#x27;ve found is &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;guibou&#x2F;nixGL&quot;&gt;NixGL&lt;&#x2F;a&gt;. &lt;&#x2F;p&gt;
+&lt;p&gt;Use it like this:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;nix run --impure github:guibou&#x2F;nixGL -- nix run
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Or, if your Nix install doesn&#x27;t have Non-free packages enabled by default:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;export NIXPKGS_ALLOW_UNFREE=1 &amp;amp;&amp;amp; nix run --impure github:guibou&#x2F;nixGL -- nix run
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>Nix Powered Dev Environments: Rust</title>
+        <published>2023-04-24T00:00:00+00:00</published>
+        <updated>2023-04-24T00:00:00+00:00</updated>
+        <author>
+          <name>Unknown</name>
+        </author>
+        <link rel="alternate" href="https://blog.graysonhead.net/posts/sane-nix-flake-rust/" type="text/html"/>
+        <id>https://blog.graysonhead.net/posts/sane-nix-flake-rust/</id>
+        
+        <content type="html">&lt;p&gt;Nix is not just a language, package manager, or operating system, but an ecosystem with remarkable capabilities. &lt;&#x2F;p&gt;
+&lt;p&gt;This tutorial is targeted for someone who is getting their feet wet with Nix, using the Nix
+package manager on Linux or MacOS. But, it also demonstrates a development workflow
+that can be used by other crazy people like me that daily drive NixOS.&lt;&#x2F;p&gt;
+&lt;p&gt;I started using Nix about a year and a half ago, and since then I&#x27;ve 
+gone deep down the rabbit hole. To the point where my entire home setup runs 
+NixOS primarily. Having a consistent experience across all
+of my computers is a wonderful thing, and one of the best parts is 
+having truly 100% isolated development environments. &lt;&#x2F;p&gt;
+&lt;p&gt;While bootstrapping these is a bit more work, (due to an intentional complete 
+lack of development tools in my system path), having near 
+guaranteed isolation between projects is 
+quite an incredible thing.&lt;&#x2F;p&gt;
+&lt;p&gt;The core components of this development workflow center around &lt;a href=&quot;https:&#x2F;&#x2F;nixos.wiki&#x2F;wiki&#x2F;Flakes&quot;&gt;Nix Flakes&lt;&#x2F;a&gt; and &lt;a href=&quot;https:&#x2F;&#x2F;direnv.net&#x2F;&quot;&gt;Direnv&lt;&#x2F;a&gt;.&lt;&#x2F;p&gt;
+&lt;h1 id=&quot;flake-templates&quot;&gt;Flake Templates&lt;&#x2F;h1&gt;
+&lt;p&gt;Due to the increased initial cost of setting up a new project, its almost mandatory to 
+create standardized Flake templates to save yourself time when kickstarting a new project.&lt;&#x2F;p&gt;
+&lt;p&gt;I maintain a repo of &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;graysonhead&#x2F;nix-templates&quot;&gt;Flake Templates&lt;&#x2F;a&gt; customized for my use, but they are MIT licensed so feel free to use them.&lt;&#x2F;p&gt;
+&lt;p&gt;Today we are going to explore the Rust templates that I still actively use.&lt;&#x2F;p&gt;
+&lt;h1 id=&quot;simple-naersk-nixpkgs&quot;&gt;Simple: Naersk + Nixpkgs&lt;&#x2F;h1&gt;
+&lt;p&gt;Here is a simple, but useful, Rust Flake example:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;nix&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-nix &quot;&gt;&lt;code class=&quot;language-nix&quot; data-lang=&quot;nix&quot;&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;  &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# This is our input set, it contains the channels we will construct the flake from.
+&lt;&#x2F;span&gt;&lt;span&gt;  &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;inputs &lt;&#x2F;span&gt;&lt;span&gt;= {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# Flake-utils allows us to easily support multiple architectures.
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;flake-utils&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;url &lt;&#x2F;span&gt;&lt;span&gt;= &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;github:numtide&#x2F;flake-utils&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# Naersk is a zero-configuration zero-codegen solution to packaging Rust.
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;naersk&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;url &lt;&#x2F;span&gt;&lt;span&gt;= &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;github:nix-community&#x2F;naersk&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# Nixpkgs is the main package repo for Nix, we will use it to bring in all of our
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# libraries and tools.
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;nixpkgs&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;url &lt;&#x2F;span&gt;&lt;span&gt;= &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;github:NixOS&#x2F;nixpkgs&#x2F;nixpkgs-unstable&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;;
+&lt;&#x2F;span&gt;&lt;span&gt;  };
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;  &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# This is the output set, Nix and other Flakes will be able to consume the attributes
+&lt;&#x2F;span&gt;&lt;span&gt;  &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# in the output set.
+&lt;&#x2F;span&gt;&lt;span&gt;  &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;outputs &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;{ &lt;&#x2F;span&gt;&lt;span&gt;self, flake-utils, naersk, nixpkgs &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;}&lt;&#x2F;span&gt;&lt;span&gt;:
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# We wrap the entire output set in this flake-utils function, which builds the flake
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# for each architecture type supported by nix.
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;flake-utils&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;lib&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;eachDefaultSystem &lt;&#x2F;span&gt;&lt;span&gt;(system:
+&lt;&#x2F;span&gt;&lt;span&gt;      &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# This sets up nixpkgs, where we will pull our dependencies from
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;pkgs &lt;&#x2F;span&gt;&lt;span&gt;= (&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;import &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;nixpkgs&lt;&#x2F;span&gt;&lt;span&gt;) {
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# You can insert overlays here by calling `inherit system overlays;` 
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;inherit &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;system&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;        };
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# This sets up naersk, which we will use later.
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;naersk&amp;#39; &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pkgs&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;callPackage naersk &lt;&#x2F;span&gt;&lt;span&gt;{ };
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# Here we can add non-rust dependencies that our program requires *at run time*.
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;buildInputs &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;with &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pkgs&lt;&#x2F;span&gt;&lt;span&gt;; [
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        ];
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# here we can add non-rust dependencies that our program requires *at build time*.
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;nativeBuildInputs &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;with &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pkgs&lt;&#x2F;span&gt;&lt;span&gt;; [
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        ];
+&lt;&#x2F;span&gt;&lt;span&gt;      &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;in
+&lt;&#x2F;span&gt;&lt;span&gt;      &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;rec &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# Build this with `nix build`, run it with `nix run`
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;defaultPackage &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;packages&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;app&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;packages &lt;&#x2F;span&gt;&lt;span&gt;=
+&lt;&#x2F;span&gt;&lt;span&gt;          {
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;app &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;naersk&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;buildPackage &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;              &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# Naersk will look for a `Cargo.toml` in this directory
+&lt;&#x2F;span&gt;&lt;span&gt;              &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;src &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;.&#x2F;.&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;              &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# Our buildinputs from above are specified here
+&lt;&#x2F;span&gt;&lt;span&gt;              &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;nativeBuildInputs &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;nativeBuildInputs&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;              &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;buildInputs &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;buildInputs&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;            };
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;contianer &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pkgs&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;dockerTools&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;buildImage
+&lt;&#x2F;span&gt;&lt;span&gt;              {
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;name &lt;&#x2F;span&gt;&lt;span&gt;= &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;app&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;;
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;config &lt;&#x2F;span&gt;&lt;span&gt;= {
+&lt;&#x2F;span&gt;&lt;span&gt;                  &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;entrypoint &lt;&#x2F;span&gt;&lt;span&gt;= [ &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#ab7967;&quot;&gt;${&lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#bf616a;&quot;&gt;packages&lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#c0c5ce;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#bf616a;&quot;&gt;app&lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#ab7967;&quot;&gt;}&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;&#x2F;bin&#x2F;app&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot; ];
+&lt;&#x2F;span&gt;&lt;span&gt;                };
+&lt;&#x2F;span&gt;&lt;span&gt;              };
+&lt;&#x2F;span&gt;&lt;span&gt;          };
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# This will be entered by direnv, or by manually running `nix shell`. This ensures
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# that our development environment will have all the correct tools at the correct
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# version for this project.
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;devShell &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pkgs&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;mkShell &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# Here we add any tools that we want in our dev-shell but aren&amp;#39;t required to build
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# our application.
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;nativeBuildInputs &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;with &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pkgs&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;            [
+&lt;&#x2F;span&gt;&lt;span&gt;              &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;nixpkgs-fmt
+&lt;&#x2F;span&gt;&lt;span&gt;              &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;cmake
+&lt;&#x2F;span&gt;&lt;span&gt;              &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;rustc
+&lt;&#x2F;span&gt;&lt;span&gt;              &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;cargo
+&lt;&#x2F;span&gt;&lt;span&gt;              &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;clippy
+&lt;&#x2F;span&gt;&lt;span&gt;            ] ++ &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;buildInputs &lt;&#x2F;span&gt;&lt;span&gt;++ &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;nativeBuildInputs&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# The above line merges our buildInputs into the devshell, so we have them when
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# using cargo tools from inside our devshell.
+&lt;&#x2F;span&gt;&lt;span&gt;        };
+&lt;&#x2F;span&gt;&lt;span&gt;      }
+&lt;&#x2F;span&gt;&lt;span&gt;    );
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;You can setup this repo locally with this command:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;nix flake new --template github:graysonhead&#x2F;nix-templates#rust-naersk .&#x2F;changeme
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;This is the base template I use for any simple rust project I use that will be based off of
+nixpgks and not require a nightly (or otherwise specific) build of Rust. Its a good starting
+point, and it is already pretty flexible. For instance, if you are building something that
+requires openssl you only need to change one line to add it:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;nix&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-nix &quot;&gt;&lt;code class=&quot;language-nix&quot; data-lang=&quot;nix&quot;&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;  &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;buildInputs &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;with &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pkgs&lt;&#x2F;span&gt;&lt;span&gt;; [
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;openssl
+&lt;&#x2F;span&gt;&lt;span&gt;  ];
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Using it is also simple. First, you shoud familiarize yourself with the output of &lt;code&gt;nix flake show&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;$ nix flake show
+&lt;&#x2F;span&gt;&lt;span&gt;git+file:&#x2F;&#x2F;&#x2F;home&#x2F;grayson&#x2F;RustProjects&#x2F;naersk-template
+&lt;&#x2F;span&gt;&lt;span&gt;├───defaultPackage
+&lt;&#x2F;span&gt;&lt;span&gt;│   ├───aarch64-darwin: package &amp;#39;naersk-template-0.1.0&amp;#39;
+&lt;&#x2F;span&gt;&lt;span&gt;│   ├───aarch64-linux: package &amp;#39;naersk-template-0.1.0&amp;#39;
+&lt;&#x2F;span&gt;&lt;span&gt;│   ├───x86_64-darwin: package &amp;#39;naersk-template-0.1.0&amp;#39;
+&lt;&#x2F;span&gt;&lt;span&gt;│   └───x86_64-linux: package &amp;#39;naersk-template-0.1.0&amp;#39;
+&lt;&#x2F;span&gt;&lt;span&gt;└───devShell
+&lt;&#x2F;span&gt;&lt;span&gt;    ├───aarch64-darwin: development environment &amp;#39;nix-shell&amp;#39;
+&lt;&#x2F;span&gt;&lt;span&gt;    ├───aarch64-linux: development environment &amp;#39;nix-shell&amp;#39;
+&lt;&#x2F;span&gt;&lt;span&gt;    ├───x86_64-darwin: development environment &amp;#39;nix-shell&amp;#39;
+&lt;&#x2F;span&gt;&lt;span&gt;    └───x86_64-linux: development environment &amp;#39;nix-shell&amp;#39;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Here we can see a tree of the output set (the set that the nix flake returns) in a more visually appealing form. This command is 
+extremely useful on more complex flakes with dozens or even hundreds of outputs, but here it gives us a good idea of what is going on.&lt;&#x2F;p&gt;
+&lt;p&gt;First, notice that both our &lt;code&gt;defaultPackage&lt;&#x2F;code&gt; and &lt;code&gt;devShell&lt;&#x2F;code&gt; have outputs for each architecture already. This is a result of the 
+&lt;code&gt;flake-utils.lib.eachDefaultSystem&lt;&#x2F;code&gt; function that we wrapped our output set in. It ensures that the flake is repeated for each system type.&lt;&#x2F;p&gt;
+&lt;p&gt;As a result, our flake will work on Linux and MacOS on both x86 and ARM systems. Best of all, we got that functionality practically for free!&lt;&#x2F;p&gt;
+&lt;p&gt;Since we defined a &lt;code&gt;defaultPackage&lt;&#x2F;code&gt;, we can build the application by running &lt;code&gt;nix build&lt;&#x2F;code&gt;, or run it with &lt;code&gt;nix run&lt;&#x2F;code&gt;. You can enter the development
+shell with &lt;code&gt;nix develop&lt;&#x2F;code&gt;, which will allow you to compile your program with native tools such as &lt;code&gt;cargo&lt;&#x2F;code&gt; as well as &lt;code&gt;clippy&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;To target a specific output, you can simply trace down the tree to your desired output, and call &lt;code&gt;nix build&lt;&#x2F;code&gt; or &lt;code&gt;nix run&lt;&#x2F;code&gt; like this:
+&lt;code&gt;nix run .#defaultPackage.x86_64-linux&lt;&#x2F;code&gt;, or whatever arch you are on.&lt;&#x2F;p&gt;
+&lt;h1 id=&quot;containers&quot;&gt;Containers&lt;&#x2F;h1&gt;
+&lt;p&gt;Another nice thing about Nix flakes, is that you can easily build 
+docker containers without needing a fragile dockerfile. For instance, you can
+modify the output set and add a seperate output for building a container image:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;nix&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-nix &quot;&gt;&lt;code class=&quot;language-nix&quot; data-lang=&quot;nix&quot;&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;packages &lt;&#x2F;span&gt;&lt;span&gt;=
+&lt;&#x2F;span&gt;&lt;span&gt;          {
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;app &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;naersk&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;buildPackage &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;              &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# Naersk will look for a `Cargo.toml` in this directory
+&lt;&#x2F;span&gt;&lt;span&gt;              &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;src &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;.&#x2F;.&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;              &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# Our buildinputs from above are specified here
+&lt;&#x2F;span&gt;&lt;span&gt;              &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;nativeBuildInputs &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;nativeBuildInputs&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;              &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;buildInputs &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;buildInputs&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;            };
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;contianer &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pkgs&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;dockerTools&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;buildImage
+&lt;&#x2F;span&gt;&lt;span&gt;              {
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;name &lt;&#x2F;span&gt;&lt;span&gt;= &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;app&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;;
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;config &lt;&#x2F;span&gt;&lt;span&gt;= {
+&lt;&#x2F;span&gt;&lt;span&gt;                  &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;entrypoint &lt;&#x2F;span&gt;&lt;span&gt;= [ &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#ab7967;&quot;&gt;${&lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#bf616a;&quot;&gt;packages&lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#c0c5ce;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#bf616a;&quot;&gt;app&lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#ab7967;&quot;&gt;}&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;&#x2F;bin&#x2F;app&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot; ];
+&lt;&#x2F;span&gt;&lt;span&gt;                };
+&lt;&#x2F;span&gt;&lt;span&gt;              };
+&lt;&#x2F;span&gt;&lt;span&gt;          };
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;This allows you to build a container image by running &lt;code&gt;nix build .#container&lt;&#x2F;code&gt;, which
+can be loaded into docker via &lt;code&gt;docker load -i .&#x2F;result&lt;&#x2F;code&gt;. &lt;&#x2F;p&gt;
+&lt;h1 id=&quot;multi-workspace-projects&quot;&gt;Multi-Workspace Projects&lt;&#x2F;h1&gt;
+&lt;p&gt;Flakes also allow you to utilize workspaces as well, although the process for doing that 
+in Naersk isn&#x27;t exactly straightforward. &lt;&#x2F;p&gt;
+&lt;p&gt;To build a project in a workspace, you can add this to your package output definition:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;nix&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-nix &quot;&gt;&lt;code class=&quot;language-nix&quot; data-lang=&quot;nix&quot;&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;  &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;example-workspaced-app &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;naersk&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;buildPackage &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;name &lt;&#x2F;span&gt;&lt;span&gt;= &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;example-workspace&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;src &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;.&#x2F;.&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;cargoBuildOptions &lt;&#x2F;span&gt;&lt;span&gt;= x: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;x &lt;&#x2F;span&gt;&lt;span&gt;++ [ &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;-p&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot; &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;example-workspace&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot; ];
+&lt;&#x2F;span&gt;&lt;span&gt;  };
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;This assumes that your workspace (with its own &lt;code&gt;Cargo.toml&lt;&#x2F;code&gt; file) is located in &lt;code&gt;.&#x2F;example-workspace&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;Note that you will also need to ensure that your main &lt;code&gt;Cargo.toml&lt;&#x2F;code&gt; file has an entry
+for this workspace, like this:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;toml&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-toml &quot;&gt;&lt;code class=&quot;language-toml&quot; data-lang=&quot;toml&quot;&gt;&lt;span&gt;[workspace]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;members &lt;&#x2F;span&gt;&lt;span&gt;= [
+&lt;&#x2F;span&gt;&lt;span&gt;    &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;example-workspace&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;
+&lt;&#x2F;span&gt;&lt;span&gt;]
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Cargo technically doesn&#x27;t &lt;em&gt;need&lt;&#x2F;em&gt; this entry to function, but Naersk does, and you
+won&#x27;t be able to build or run anything in that workspace without it.&lt;&#x2F;p&gt;
+&lt;h1 id=&quot;nightly-rust&quot;&gt;Nightly Rust&lt;&#x2F;h1&gt;
+&lt;p&gt;If you want to use nightly rust (or a version seperate from Nixpkgs), you can use the &lt;code&gt;oxalica&#x2F;rust-overlay&lt;&#x2F;code&gt;. &lt;&#x2F;p&gt;
+&lt;p&gt;Here is a full example:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;nix&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-nix &quot;&gt;&lt;code class=&quot;language-nix&quot; data-lang=&quot;nix&quot;&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;  &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;inputs &lt;&#x2F;span&gt;&lt;span&gt;= {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;flake-utils&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;url &lt;&#x2F;span&gt;&lt;span&gt;= &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;github:numtide&#x2F;flake-utils&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;naersk&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;url &lt;&#x2F;span&gt;&lt;span&gt;= &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;github:nix-community&#x2F;naersk&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;rust-overlay&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;url &lt;&#x2F;span&gt;&lt;span&gt;= &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;github:oxalica&#x2F;rust-overlay&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;nixpkgs&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;url &lt;&#x2F;span&gt;&lt;span&gt;= &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;github:NixOS&#x2F;nixpkgs&#x2F;nixpkgs-unstable&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;;
+&lt;&#x2F;span&gt;&lt;span&gt;  };
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;  &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;outputs &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;{ &lt;&#x2F;span&gt;&lt;span&gt;self, flake-utils, naersk, nixpkgs, rust-overlay &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;}&lt;&#x2F;span&gt;&lt;span&gt;:
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;flake-utils&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;lib&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;eachDefaultSystem &lt;&#x2F;span&gt;&lt;span&gt;(system:
+&lt;&#x2F;span&gt;&lt;span&gt;      &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;overlays &lt;&#x2F;span&gt;&lt;span&gt;= [ (&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;import &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;rust-overlay&lt;&#x2F;span&gt;&lt;span&gt;) ];
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;pkgs &lt;&#x2F;span&gt;&lt;span&gt;= (&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;import &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;nixpkgs&lt;&#x2F;span&gt;&lt;span&gt;) {
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;inherit &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;system overlays&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;        };
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;naersk&amp;#39; &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pkgs&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;callPackage naersk &lt;&#x2F;span&gt;&lt;span&gt;{ };
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;buildInputs &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;with &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pkgs&lt;&#x2F;span&gt;&lt;span&gt;; [
+&lt;&#x2F;span&gt;&lt;span&gt;        ];
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;nativeBuildInputs &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;with &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pkgs&lt;&#x2F;span&gt;&lt;span&gt;; [
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# This sets up the rust suite, automatically selecting the latest nightly version
+&lt;&#x2F;span&gt;&lt;span&gt;          (&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;rust-bin&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;selectLatestNightlyWith
+&lt;&#x2F;span&gt;&lt;span&gt;            (toolchain: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;toolchain&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;default&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;override &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;              &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;extensions &lt;&#x2F;span&gt;&lt;span&gt;= [ &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;rust-src&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot; &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;clippy&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot; ];
+&lt;&#x2F;span&gt;&lt;span&gt;            }))
+&lt;&#x2F;span&gt;&lt;span&gt;        ];
+&lt;&#x2F;span&gt;&lt;span&gt;      &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;in
+&lt;&#x2F;span&gt;&lt;span&gt;      &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;rec &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# For `nix build` &amp;amp; `nix run`:
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;defaultPackage &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;packages&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;naersk-nightly&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;packages &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;rec &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;naersk-nightly &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;naersk&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;buildPackage &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;src &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;.&#x2F;.&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;nativeBuildInputs &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;nativeBuildInputs&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;buildInputs &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;buildInputs&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;          };
+&lt;&#x2F;span&gt;&lt;span&gt;        };
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;# For `nix develop`:
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;devShell &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pkgs&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;mkShell &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;          &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;nativeBuildInputs &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;with &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pkgs&lt;&#x2F;span&gt;&lt;span&gt;; [
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;cargo-expand
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;nixpkgs-fmt
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;cmake
+&lt;&#x2F;span&gt;&lt;span&gt;          ] ++ &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;buildInputs &lt;&#x2F;span&gt;&lt;span&gt;++ &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;nativeBuildInputs&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;        };
+&lt;&#x2F;span&gt;&lt;span&gt;      }
+&lt;&#x2F;span&gt;&lt;span&gt;    );
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;h1 id=&quot;making-development-shells-automatic&quot;&gt;Making Development Shells Automatic&lt;&#x2F;h1&gt;
+&lt;p&gt;Using &lt;a href=&quot;https:&#x2F;&#x2F;direnv.net&#x2F;&quot;&gt;direnv&lt;&#x2F;a&gt;, and &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;nix-community&#x2F;nix-direnv&quot;&gt;nix-direnv&lt;&#x2F;a&gt;, you can make the activation of your development
+environment automatic. Add an &lt;code&gt;.envrc&lt;&#x2F;code&gt; file in the root of your repo with the line:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;use flake
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;And then run the command &lt;code&gt;direnv allow&lt;&#x2F;code&gt; from this directory. Your development shell will now be activated any time you change directory to that location.&lt;&#x2F;p&gt;
+&lt;p&gt;This means that your entire environment will automatically switch whenever you change between projects, meaning you don&#x27;t have to deal with rustup and
+toolchains whenever you switch between a nightly and stable Rust project.&lt;&#x2F;p&gt;
+&lt;p&gt;You can also get IDE&#x2F;terminal editor plugins that allow you to use this environment as well, so that your &lt;code&gt;rust-analyzer&lt;&#x2F;code&gt; version is appropriate to the version
+of Rust you are developing on. I use &lt;code&gt;cab404.vscode-direnv&lt;&#x2F;code&gt; for vscode, and &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;direnv&#x2F;direnv.vim&quot;&gt;direnv-vim&lt;&#x2F;a&gt; for vim.&lt;&#x2F;p&gt;
+&lt;h1 id=&quot;bonus-round-nix-party-tricks&quot;&gt;Bonus Round: Nix Party Tricks&lt;&#x2F;h1&gt;
+&lt;p&gt;Lets look at some other fun stuff you can trivially do now that you have this set up. &lt;&#x2F;p&gt;
+&lt;p&gt;Run a program from a remote git repo without permanently installing it in your profile or system path:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;$ nix run github:nixos&#x2F;nixpkgs&#x2F;nixpkgs-unstable#hello
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;You can also cross-compile it to a different architecture (requires for &lt;code&gt;boot.binfmt.emulatedSystems&lt;&#x2F;code&gt; to be set appropriately on NixOS):&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;$ nix build github:nixos&#x2F;nixpkgs&#x2F;nixpkgs-unstable#legacyPackages.aarch64-linux.hello
+&lt;&#x2F;span&gt;&lt;span&gt;$ file result&#x2F;bin&#x2F;hello 
+&lt;&#x2F;span&gt;&lt;span&gt;result&#x2F;bin&#x2F;hello: ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter &#x2F;nix&#x2F;store&#x2F;rjpx52ch4508wrq8wjf5nnbsc6pr3158-glibc-2.37-8&#x2F;lib&#x2F;ld-linux-aarch64.so.1, for GNU&#x2F;Linux 3.10.0, not stripped
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Need to distribute your program via RPM or Deb? In most cases, this is trivial:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;$ nix bundle --bundler github:NixOS&#x2F;bundlers#toDEB .#defaultPackage.x86_64-linux
+&lt;&#x2F;span&gt;&lt;span&gt;$ nix bundle --bundler github:NixOS&#x2F;bundlers#toRPM .#defaultPackage.x86_64-linux
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+</content>
+        
+    </entry>
+</feed>

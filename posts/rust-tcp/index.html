@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+
+    
+    <title>
+         Async TCP in Rust Without Shooting Yourself in the Foot
+        
+    </title>
+
+    
+    <meta property="og:title"
+        content="Async TCP in Rust Without Shooting Yourself in the Foot" />
+    
+    
+
+    
+    
+    
+
+    
+    
+    
+
+    
+
+    
+
+    
+
+    
+    
+    <script src=https://blog.graysonhead.net/js/feather.min.js></script>
+    
+
+
+    
+    <link href=https://blog.graysonhead.net/css/fonts.css rel="stylesheet" />
+    
+
+    <link rel="stylesheet" type="text/css" media="screen" href=https://blog.graysonhead.net/css/main.css />
+
+    
+    <link rel="stylesheet" id="darkModeStyle" type="text/css" href=https://blog.graysonhead.net/css/dark.css   />
+    
+
+
+    
+
+
+</head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-CCTJX63WS9"></script>
+<script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    gtag('js', new Date());
+
+    gtag('config', 'G-CCTJX63WS9');
+</script>
+
+<body>
+    <div class="content">
+        <header>
+    <div class="main" id="main_title">
+        <a href=https:&#x2F;&#x2F;blog.graysonhead.net></a>
+    </div>
+
+    <nav>
+        
+            <a href=&#x2F;posts>&#x2F;posts</a>
+        
+            <a href=&#x2F;projects>&#x2F;projects</a>
+        
+            <a href=&#x2F;about>&#x2F;about</a>
+        
+
+        
+            |
+
+            
+                <a href=&#x2F;>en</a>
+            
+        
+
+        
+    </nav>
+</header>
+
+
+        
+    
+<main>
+    <article>
+        <div class="title">
+            <h1 class="title">Async TCP in Rust Without Shooting Yourself in the Foot</h1>
+            <div class="meta">
+                
+                on  2023-04-18
+
+                
+            </div>
+        </div>
+
+        
+
+        <section class="body">
+            <p>As someone who came to Rust from high level languages, lower level networking was something
+that I was very excited to work with in Rust. While Python's TCP and UDP implementations are
+great, the speed of Python often felt very constraining when writing services that needed
+to move lots of data quickly and concurrently. </p>
+<p>I was glad to discover that working with the async implementations of TCP and UDP sockets in
+Rust using <a href="https://tokio.rs/">Tokio</a> was quite intuitive, for the most part. While getting traffic flowing was
+easy, getting traffic flowing <em>reliably</em> required some steps beyond the boilerplate in the 
+documentation. So, let my lessons be your lessons, lets send some segments!</p>
+<h2 id="tcp-basics">TCP Basics</h2>
+<p>Frankly, TCP is a complicated way of getting data from point A to point B. There are a lot 
+of steps to set up, send data, acknowledge the receipt of data, and terminate the connection.
+Fortunately, the OS handles most of this for us. The sockets our program will interact
+with seem a lot like magical data gateways, and that is the point of TCP in a nutshell. </p>
+<p>Compared to User Datagram Protocl (UDP), TCP has a lot of advantages. Namely:</p>
+<ul>
+<li>Delivery order of data is guaranteed</li>
+<li>Re-transmission of data is automatic if not acknowledged by the other side</li>
+<li>Flow and Congestion control</li>
+<li>You can easily send blocs of data larger than your network's Maximum Transmission Unit (MTU)</li>
+</ul>
+<p>But, there is a price to pay:</p>
+<ul>
+<li>Programs using TCP are often more complex. This is primarily due to keeping track of more connection states</li>
+<li>TCP itself has some overhead, a system using many TCP sessions may use more memory than one using UDP for 
+the same purpose</li>
+<li>Due to complex flow handling and congestion control algorithms, sometimes its harder to troubleshoot TCP performance issues</li>
+</ul>
+<p>Generally, TCP is useful if you need guaranteed delivery of data in a specific order. It can also reduce the complexity of 
+programs that need a lot of bidirectional connections between a single server and multiple clients. It also can make it 
+easier to send large blocs of data larger than your MTU, but there are no shortage of libraries that make this just as easy with
+UDP.</p>
+<h1 id="getting-started-streams-and-listeners">Getting Started: Streams and Listeners</h1>
+<p>Lets get some connections going. Lets start a project and add a dependency for our async runtime, Tokio:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>cargo new rust-tcp-tutorial  
+</span><span>cargo add tokio --features socket2 --features macros --features rt-multi-thread --features net --features sync --features io-util
+</span></code></pre>
+<p>Next, we will add two rust files in <code>/src/bin/</code>:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#65737e;">// src/bin/server.rs
+</span><span style="color:#b48ead;">use </span><span>tokio::net::TcpListener;
+</span><span>
+</span><span>#[</span><span style="color:#bf616a;">tokio</span><span>::</span><span style="color:#bf616a;">main</span><span>]
+</span><span>async </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">main</span><span>() {
+</span><span>    </span><span style="color:#b48ead;">let</span><span> bind_addr = &quot;</span><span style="color:#a3be8c;">0.0.0.0:1234</span><span>&quot;;
+</span><span>    </span><span style="color:#96b5b4;">listen</span><span>(bind_addr).await;
+</span><span>}
+</span><span>
+</span><span>async </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">listen</span><span>(</span><span style="color:#bf616a;">bind_addr</span><span>: &amp;</span><span style="color:#b48ead;">str</span><span>) {
+</span><span>    </span><span style="color:#b48ead;">let</span><span> listener = TcpListener::bind(bind_addr).await.</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span>    </span><span style="color:#b48ead;">loop </span><span>{
+</span><span>        </span><span style="color:#b48ead;">let </span><span>(stream, _) = listener.</span><span style="color:#96b5b4;">accept</span><span>().await.</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span>        println!(&quot;</span><span style="color:#a3be8c;">Connection from </span><span style="color:#d08770;">{}</span><span>&quot;, stream.</span><span style="color:#96b5b4;">peer_addr</span><span>().</span><span style="color:#96b5b4;">unwrap</span><span>());
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#65737e;">// src/bin/client.rs
+</span><span style="color:#b48ead;">use </span><span>tokio::net::TcpStream;
+</span><span>
+</span><span>#[</span><span style="color:#bf616a;">tokio</span><span>::</span><span style="color:#bf616a;">main</span><span>]
+</span><span>async </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">main</span><span>() {
+</span><span>    </span><span style="color:#b48ead;">let</span><span> server_addr = &quot;</span><span style="color:#a3be8c;">127.0.0.1:1234</span><span>&quot;;
+</span><span>    </span><span style="color:#b48ead;">let</span><span> stream: TcpStream = TcpStream::connect(server_addr).await.</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span>    println!(&quot;</span><span style="color:#a3be8c;">Connected to </span><span style="color:#d08770;">{}</span><span>&quot;, stream.</span><span style="color:#96b5b4;">peer_addr</span><span>().</span><span style="color:#96b5b4;">unwrap</span><span>());
+</span><span>}
+</span><span>
+</span></code></pre>
+<p>Our first example doesn't do much useful. If you run the two programs at the same time, you 
+will see that all they do is initiate a connection.</p>
+<p>You can run any rust file in <code>/src/bin</code> like this:<br />
+<code>cargo run --bin server</code><br />
+<code>cargo run --bin client</code></p>
+<p>On the server, you will get the output:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>Connection from 127.0.0.1:55586
+</span></code></pre>
+<p>And on the client:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>Connected to 127.0.0.1:1234
+</span></code></pre>
+<p>Taking a closer look at what is happening thus far: On the server,
+we are binding to a socket address, which is represented by a bind IP and port. A bind address
+is a mechanism to inform the host operating system upon which interfaces this listener will be bound.</p>
+<p>For instance, say we have a system with the following Interface layout:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>eth0 10.1.1.15
+</span><span>eth1 172.16.0.25
+</span><span>lo 127.0.0.1
+</span></code></pre>
+<p>If the bind address were set to <code>127.0.0.1:1234</code>, any request to <code>eth0</code> or <code>eth1</code> would fail (usually with
+a connection refused error), but a request sent to the local loopback address of <code>127.0.0.1</code> with a 
+destination port of <code>1234</code> would succeed.</p>
+<p>A bind address of of <code>10.5.5.15:1234</code> would allow connections to <code>eth0</code> but not <code>eth1</code> or the local loopback.</p>
+<p>If you want to bind to all available interfaces, you can use an bind IP of <code>0.0.0.0:1234</code>.</p>
+<p>The call to <code>TcpListener::bind()</code>, unsurprisingly returns a <a href="https://docs.rs/tokio/latest/tokio/net/struct.TcpListener.html">TcpListener</a>. </p>
+<p>Once a client connects, we can call <code>listener.accept()</code> to get a <a href="https://docs.rs/tokio/latest/tokio/net/struct.TcpStream.html">TcpStream</a>
+for this connection. This is the mechanism that allows you to send and receive data to and from this client.</p>
+<p>On the client side, you will notice that <code>TcpStream::connect()</code> of course also gives us a <code>TcpStream</code>. This is 
+convenient as there can be a lot of commonality in the way clients and servers interact.</p>
+<p>So, to sum up, a TCP Server binds to a port, which returns a Listener. These Listeners then give us Streams, and 
+streams are what we will use in the next section to actually send and receive data. </p>
+<h2 id="using-streams">Using Streams</h2>
+<p>Before getting into some examples, I want to point out that the <a href="https://docs.rs/tokio/latest">Tokio docs</a> are a wonderful resource, and you
+will see the skeleton of the examples in a lot of production code. But, they quite minimal, and they don't go over (or at least don't explain)
+some of the more common pitfalls you may run into. The following not-so-minimal example will show a lot of this behavior.</p>
+<p>Extending our previous code, lets add relay functionality to the server:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#65737e;">// src/bin/server.rs
+</span><span style="color:#b48ead;">use </span><span>std::{error::Error, io};
+</span><span style="color:#b48ead;">use </span><span>tokio::{
+</span><span>    io::{AsyncReadExt, Interest},
+</span><span>    net::{TcpListener, TcpStream},
+</span><span>};
+</span><span>
+</span><span>#[</span><span style="color:#bf616a;">tokio</span><span>::</span><span style="color:#bf616a;">main</span><span>]
+</span><span>async </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">main</span><span>() {
+</span><span>    </span><span style="color:#b48ead;">let</span><span> bind_addr = &quot;</span><span style="color:#a3be8c;">0.0.0.0:1234</span><span>&quot;;
+</span><span>    </span><span style="color:#96b5b4;">listen</span><span>(bind_addr).await;
+</span><span>}
+</span><span>
+</span><span>async </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">listen</span><span>(</span><span style="color:#bf616a;">bind_addr</span><span>: &amp;</span><span style="color:#b48ead;">str</span><span>) {
+</span><span>    </span><span style="color:#b48ead;">let</span><span> listener = TcpListener::bind(bind_addr).await.</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span>    </span><span style="color:#b48ead;">loop </span><span>{
+</span><span>        </span><span style="color:#b48ead;">let </span><span>(stream, _) = listener.</span><span style="color:#96b5b4;">accept</span><span>().await.</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span>        tokio::spawn(async </span><span style="color:#b48ead;">move </span><span>{
+</span><span>            </span><span style="color:#96b5b4;">handle_stream</span><span>(stream).await.</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span>        });
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span>async </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">handle_stream</span><span>(</span><span style="color:#bf616a;">stream</span><span>: TcpStream) -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
+</span><span>    println!(&quot;</span><span style="color:#a3be8c;">Connection from </span><span style="color:#d08770;">{}</span><span>&quot;, stream.</span><span style="color:#96b5b4;">peer_addr</span><span>().</span><span style="color:#96b5b4;">unwrap</span><span>());
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> reply_queue: Vec&lt;Vec&lt;</span><span style="color:#b48ead;">u8</span><span>&gt;&gt; = Vec::new();
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> buf: [</span><span style="color:#b48ead;">u8</span><span>; </span><span style="color:#d08770;">1024</span><span>];
+</span><span>    </span><span style="color:#b48ead;">loop </span><span>{
+</span><span>        </span><span style="color:#b48ead;">let</span><span> ready = stream
+</span><span>            .</span><span style="color:#96b5b4;">ready</span><span>(Interest::</span><span style="color:#d08770;">READABLE </span><span>| Interest::</span><span style="color:#d08770;">WRITABLE</span><span>)
+</span><span>            .await?;
+</span><span>        </span><span style="color:#b48ead;">if</span><span> ready.</span><span style="color:#96b5b4;">is_readable</span><span>() {
+</span><span>	    buf = [</span><span style="color:#d08770;">0</span><span>; </span><span style="color:#d08770;">1024</span><span>];
+</span><span>            </span><span style="color:#b48ead;">match</span><span> stream.</span><span style="color:#96b5b4;">try_read</span><span>(&amp;</span><span style="color:#b48ead;">mut</span><span> buf) {
+</span><span>                Ok(n) =&gt; {
+</span><span>                    println!(&quot;</span><span style="color:#a3be8c;">read </span><span style="color:#d08770;">{}</span><span style="color:#a3be8c;"> bytes</span><span>&quot;, n);
+</span><span>                    </span><span style="color:#b48ead;">let mut</span><span> result_buffer: Vec&lt;</span><span style="color:#b48ead;">u8</span><span>&gt; = Vec::with_capacity(n);
+</span><span>                    buf.</span><span style="color:#96b5b4;">take</span><span>(n as </span><span style="color:#b48ead;">u64</span><span>).</span><span style="color:#96b5b4;">read_to_end</span><span>(&amp;</span><span style="color:#b48ead;">mut</span><span> result_buffer).await?;
+</span><span>                    reply_queue.</span><span style="color:#96b5b4;">push</span><span>(buf.</span><span style="color:#96b5b4;">to_vec</span><span>());
+</span><span>                }
+</span><span>                Err(</span><span style="color:#b48ead;">ref</span><span> e) </span><span style="color:#b48ead;">if</span><span> e.</span><span style="color:#96b5b4;">kind</span><span>() == io::ErrorKind::WouldBlock =&gt; {
+</span><span>                    </span><span style="color:#b48ead;">continue</span><span>;
+</span><span>                }
+</span><span>                Err(e) =&gt; {
+</span><span>                    </span><span style="color:#b48ead;">return </span><span>Err(e.</span><span style="color:#96b5b4;">into</span><span>());
+</span><span>                }
+</span><span>            }
+</span><span>        }
+</span><span>
+</span><span>        </span><span style="color:#b48ead;">if</span><span> ready.</span><span style="color:#96b5b4;">is_writable</span><span>() {
+</span><span>            </span><span style="color:#b48ead;">if let </span><span>Some(msg) =  reply_queue.</span><span style="color:#96b5b4;">pop</span><span>() {
+</span><span>                </span><span style="color:#b48ead;">match</span><span> stream.</span><span style="color:#96b5b4;">try_write</span><span>(&amp;msg) {
+</span><span>                    Ok(n) =&gt; {
+</span><span>                        println!(&quot;</span><span style="color:#a3be8c;">Wrote </span><span style="color:#d08770;">{}</span><span style="color:#a3be8c;"> bytes</span><span>&quot;, n);
+</span><span>                    }
+</span><span>                    Err(</span><span style="color:#b48ead;">ref</span><span> e) </span><span style="color:#b48ead;">if</span><span> e.</span><span style="color:#96b5b4;">kind</span><span>() == io::ErrorKind::WouldBlock =&gt; {
+</span><span>                        </span><span style="color:#b48ead;">continue</span><span>;
+</span><span>                    }
+</span><span>                    Err(e) =&gt; {
+</span><span>                        </span><span style="color:#b48ead;">return </span><span>Err(e.</span><span style="color:#96b5b4;">into</span><span>());
+</span><span>                    }
+</span><span>                }
+</span><span>            }
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#65737e;">// src/bin/client.rs
+</span><span style="color:#b48ead;">use </span><span>std::error::Error;
+</span><span style="color:#b48ead;">use </span><span>std::io;
+</span><span style="color:#b48ead;">use </span><span>tokio::io::AsyncReadExt;
+</span><span style="color:#b48ead;">use </span><span>tokio::net::TcpStream;
+</span><span>
+</span><span>#[</span><span style="color:#bf616a;">tokio</span><span>::</span><span style="color:#bf616a;">main</span><span>]
+</span><span>async </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">main</span><span>() {
+</span><span>    </span><span style="color:#b48ead;">let</span><span> server_addr = &quot;</span><span style="color:#a3be8c;">127.0.0.1:1234</span><span>&quot;;
+</span><span>    </span><span style="color:#b48ead;">let</span><span> stream: TcpStream = TcpStream::connect(server_addr).await.</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span>    println!(&quot;</span><span style="color:#a3be8c;">Connected to </span><span style="color:#d08770;">{}</span><span>&quot;, stream.</span><span style="color:#96b5b4;">peer_addr</span><span>().</span><span style="color:#96b5b4;">unwrap</span><span>());
+</span><span>    </span><span style="color:#96b5b4;">send_request</span><span>(stream).await.</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span>}
+</span><span>
+</span><span>async </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">send_request</span><span>(</span><span style="color:#bf616a;">stream</span><span>: TcpStream) -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
+</span><span>    </span><span style="color:#b48ead;">loop </span><span>{
+</span><span>        stream.</span><span style="color:#96b5b4;">writable</span><span>().await?;
+</span><span>        </span><span style="color:#b48ead;">match</span><span> stream.</span><span style="color:#96b5b4;">try_write</span><span>(</span><span style="color:#b48ead;">b</span><span>&quot;</span><span style="color:#a3be8c;">Hello!</span><span>&quot;) {
+</span><span>            Ok(n) =&gt; {
+</span><span>                println!(&quot;</span><span style="color:#a3be8c;">Wrote </span><span style="color:#d08770;">{}</span><span style="color:#a3be8c;"> bytes</span><span>&quot;, n);
+</span><span>                </span><span style="color:#b48ead;">break</span><span>;
+</span><span>            }
+</span><span>            Err(</span><span style="color:#b48ead;">ref</span><span> e) </span><span style="color:#b48ead;">if</span><span> e.</span><span style="color:#96b5b4;">kind</span><span>() == io::ErrorKind::WouldBlock =&gt; {
+</span><span>                </span><span style="color:#b48ead;">continue</span><span>;
+</span><span>            }
+</span><span>            Err(e) =&gt; {
+</span><span>                </span><span style="color:#b48ead;">return </span><span>Err(e.</span><span style="color:#96b5b4;">into</span><span>());
+</span><span>            }
+</span><span>        }
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> buf: [</span><span style="color:#b48ead;">u8</span><span>; </span><span style="color:#d08770;">4096</span><span>];
+</span><span>    </span><span style="color:#b48ead;">loop </span><span>{
+</span><span>        stream.</span><span style="color:#96b5b4;">readable</span><span>().await?;
+</span><span>        buf = [</span><span style="color:#d08770;">0</span><span>; </span><span style="color:#d08770;">4096</span><span>];
+</span><span>        </span><span style="color:#b48ead;">match</span><span> stream.</span><span style="color:#96b5b4;">try_read</span><span>(&amp;</span><span style="color:#b48ead;">mut</span><span> buf) {
+</span><span>            Ok(n) =&gt; {
+</span><span>                </span><span style="color:#b48ead;">let mut</span><span> vec = Vec::with_capacity(n);
+</span><span>                buf.</span><span style="color:#96b5b4;">take</span><span>(n as </span><span style="color:#b48ead;">u64</span><span>).</span><span style="color:#96b5b4;">read_to_end</span><span>(&amp;</span><span style="color:#b48ead;">mut</span><span> vec).await?;
+</span><span>                </span><span style="color:#b48ead;">let</span><span> s = String::from_utf8(buf.</span><span style="color:#96b5b4;">to_vec</span><span>()).</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span>                println!(&quot;</span><span style="color:#a3be8c;">Got reply from host: </span><span style="color:#d08770;">{}</span><span>&quot;, s);
+</span><span>                </span><span style="color:#b48ead;">break</span><span>;
+</span><span>            }
+</span><span>            Err(</span><span style="color:#b48ead;">ref</span><span> e) </span><span style="color:#b48ead;">if</span><span> e.</span><span style="color:#96b5b4;">kind</span><span>() == io::ErrorKind::WouldBlock =&gt; {
+</span><span>                </span><span style="color:#b48ead;">continue</span><span>;
+</span><span>            }
+</span><span>            Err(e) =&gt; </span><span style="color:#b48ead;">return </span><span>Err(e.</span><span style="color:#96b5b4;">into</span><span>()),
+</span><span>        }
+</span><span>    }
+</span><span>
+</span><span>    Ok(())
+</span><span>}
+</span></code></pre>
+<p>Lets go over some of the more important parts of these changes. </p>
+<p>The client is quite a naive example, as it very deterministically sends a request and then waits for a reply, but we
+do see the start of two patterns you will see throughout the rest of this tutorial. Specifically, the <code>try_read</code> and <code>try_write</code>
+match blocks.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">loop </span><span>{
+</span><span>    stream.</span><span style="color:#96b5b4;">writable</span><span>().await?;
+</span><span>    </span><span style="color:#b48ead;">match</span><span> stream.</span><span style="color:#96b5b4;">try_write</span><span>(</span><span style="color:#b48ead;">b</span><span>&quot;</span><span style="color:#a3be8c;">Hello!</span><span>&quot;) {
+</span><span>        Ok(n) =&gt; {
+</span><span>            println!(&quot;</span><span style="color:#a3be8c;">Wrote </span><span style="color:#d08770;">{}</span><span style="color:#a3be8c;"> bytes</span><span>&quot;, n);
+</span><span>            </span><span style="color:#b48ead;">break</span><span>;
+</span><span>        }
+</span><span>        Err(</span><span style="color:#b48ead;">ref</span><span> e) </span><span style="color:#b48ead;">if</span><span> e.</span><span style="color:#96b5b4;">kind</span><span>() == io::ErrorKind::WouldBlock =&gt; {
+</span><span>            </span><span style="color:#b48ead;">continue</span><span>;
+</span><span>        }
+</span><span>        Err(e) =&gt; {
+</span><span>            </span><span style="color:#b48ead;">return </span><span>Err(e.</span><span style="color:#96b5b4;">into</span><span>());
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>So first, we check to see if the stream is actually ready to be written to. It often can't, for various reasons. And 
+sometimes it thinks it is, but it actually isn't. Notice that this method is async and thus is <code>await</code>ed. </p>
+<p>There is a lot of really cool logic happening in this one line. On Linux operating systems, when Tokio
+created the TcpStream, it registered an <a href="https://en.wikipedia.org/wiki/Epoll">epoll</a> waiter for the stream. When we
+await on the <code>writeable</code> method, Tokio puts the task to sleep until the Kernel informs us either that the stream is
+ready to be written to, or that data has been received
+and is ready to be read on the stream. What this means is, this task will consume practically no system resources 
+until there is data for it to process. Pretty neat, huh?</p>
+<p>Next, we match the result of the <code>try_write</code> method. Now, this isn't async, but <code>try_write</code> will ensure that the call
+doesn't block on IO unnecessarily. However, this creates a quandry, as sometimes the <code>writable</code> method gives us false
+positives because of weird messy kernel programming reasons. As a result, we need to be prepared to deal with that, and 
+we deal with it by matching on the <code>WouldBlock</code> error type. If we get this Error, we restart the loop and await it again.
+Eventually, we will enter the loop on a true positive, and be able to write our data. </p>
+<p>While this arrangement may sound complex, it can reduce the busy time of programs doing network IO <em>significantly</em>.</p>
+<p>Reading response uses mostly the same pattern, but with more logic to handle copying data from buffers:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">loop </span><span>{
+</span><span>        </span><span style="color:#b48ead;">let mut</span><span> buf: [</span><span style="color:#b48ead;">u8</span><span>; </span><span style="color:#d08770;">4096</span><span>];
+</span><span>        stream.</span><span style="color:#96b5b4;">readable</span><span>().await?;
+</span><span>        buf = [</span><span style="color:#d08770;">0</span><span>; </span><span style="color:#d08770;">4096</span><span>];
+</span><span>        </span><span style="color:#b48ead;">match</span><span> stream.</span><span style="color:#96b5b4;">try_read</span><span>(&amp;</span><span style="color:#b48ead;">mut</span><span> buf) {
+</span><span>            Ok(n) =&gt; {
+</span><span>                </span><span style="color:#b48ead;">let mut</span><span> vec = Vec::with_capacity(n);
+</span><span>                buf.</span><span style="color:#96b5b4;">take</span><span>(n as </span><span style="color:#b48ead;">u64</span><span>).</span><span style="color:#96b5b4;">read_to_end</span><span>(&amp;</span><span style="color:#b48ead;">mut</span><span> vec).await?;
+</span><span>                </span><span style="color:#b48ead;">let</span><span> s = String::from_utf8(buf.</span><span style="color:#96b5b4;">to_vec</span><span>()).</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span>                println!(&quot;</span><span style="color:#a3be8c;">Got reply from host: </span><span style="color:#d08770;">{}</span><span>&quot;, s);
+</span><span>                </span><span style="color:#b48ead;">break</span><span>;
+</span><span>            }
+</span><span>            Err(</span><span style="color:#b48ead;">ref</span><span> e) </span><span style="color:#b48ead;">if</span><span> e.</span><span style="color:#96b5b4;">kind</span><span>() == io::ErrorKind::WouldBlock =&gt; {
+</span><span>                </span><span style="color:#b48ead;">continue</span><span>;
+</span><span>            }
+</span><span>            Err(e) =&gt; </span><span style="color:#b48ead;">return </span><span>Err(e.</span><span style="color:#96b5b4;">into</span><span>()),
+</span><span>        }
+</span><span>    }
+</span></code></pre>
+<p>Now, for the server. Up first, our listen function is now spawning a Tokio Task on each new stream.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span>async </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">listen</span><span>(</span><span style="color:#bf616a;">bind_addr</span><span>: &amp;</span><span style="color:#b48ead;">str</span><span>) {
+</span><span>    </span><span style="color:#b48ead;">let</span><span> listener = TcpListener::bind(bind_addr).await.</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span>    </span><span style="color:#b48ead;">loop </span><span>{
+</span><span>        </span><span style="color:#b48ead;">let </span><span>(stream, _) = listener.</span><span style="color:#96b5b4;">accept</span><span>().await.</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span>        tokio::spawn(async </span><span style="color:#b48ead;">move </span><span>{
+</span><span>            </span><span style="color:#96b5b4;">handle_stream</span><span>(stream).await.</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span>        });
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>Keep in mind, Tokio Tasks are not threads. Thread count is determined by the Tokio runtime. Tasks will 
+run on a thread until they <code>await</code>, at which point another task will usually take its place. So don't feel bad about
+spinning up a bunch of tasks to handle individual client connections. Unless you are doing blocking io operations in them,
+in which case you should feel bad.</p>
+<p>Notice how we are spawning a task for each stream, and running the <code>handle_stream</code> function inside of it. While not 
+always necessary, this is a very common pattern for applications that want to process traffic for multiple clients
+simultaneously. This also takes advantage of async IO, as the program will never block while waiting for messages 
+from hosts that haven't sent any.</p>
+<p>And now, lets break the <code>handle_stream</code> function into a few distinct sections:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span>println!(&quot;</span><span style="color:#a3be8c;">Connection from </span><span style="color:#d08770;">{}</span><span>&quot;, stream.</span><span style="color:#96b5b4;">peer_addr</span><span>().</span><span style="color:#96b5b4;">unwrap</span><span>());
+</span><span style="color:#b48ead;">let mut</span><span> reply_queue: Vec&lt;Vec&lt;</span><span style="color:#b48ead;">u8</span><span>&gt;&gt; = Vec::new();
+</span><span style="color:#b48ead;">let mut</span><span> buf: [</span><span style="color:#b48ead;">u8</span><span>; </span><span style="color:#d08770;">1024</span><span>];
+</span></code></pre>
+<p>In this &quot;preamble&quot;, we are setting up a mutable <code>reply_queue</code> which we will use to store messages that we want to
+relay back to the client. Since each client's stream exists within its own Tokio task running this function, this
+isolates communication per client by default, which is a nice aspect of this pattern and lends itself well to serving
+many clients simultaneously.</p>
+<p>Now, getting into the loop:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span> </span><span style="color:#b48ead;">let</span><span> ready = stream
+</span><span>            .</span><span style="color:#96b5b4;">ready</span><span>(Interest::</span><span style="color:#d08770;">READABLE </span><span>| Interest::</span><span style="color:#d08770;">WRITABLE</span><span>)
+</span><span>            .await?;
+</span></code></pre>
+<p>This method returns a <a href="https://docs.rs/tokio/latest/tokio/io/struct.Ready.html">Ready</a> object describing the current
+state of the Stream. This allows you to handle one write operation, or one read operation per loop. This also ensures that
+your writes don't block your reads, your reads don't block your writes. Since it is <code>await</code>ed, it also ensures that the 
+Task will sleep while it has no ability to perform IO.</p>
+<p>There will be a lot of cases in more complex programs where you need to split your <code>TcpStream</code> into a <code>WriteHalf</code> and a <code>ReadHalf</code>, but that is
+a topic for another day.</p>
+<p>Now, lets run the code. But first make sure you know where your <code>ctrl + c</code> keys are:</p>
+<p>Client:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>Connected to 127.0.0.1:1234
+</span><span>Wrote 6 bytes
+</span><span>Got reply from host: Hello!
+</span></code></pre>
+<p>Server:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>read 6 bytes
+</span><span>Wrote 6 bytes
+</span><span>Wrote 0 bytes
+</span><span>read 0 bytes
+</span><span>Wrote 0 bytes
+</span><span>read 0 bytes
+</span><span>Wrote 0 bytes
+</span><span>read 0 bytes
+</span><span>Wrote 0 bytes
+</span><span>read 0 bytes
+</span><span>Wrote 0 bytes
+</span><span>read 0 bytes
+</span><span>Wrote 0 bytes
+</span><span>read 0 bytes
+</span><span>Wrote 0 bytes
+</span><span>read 0 bytes
+</span><span>Wrote 0 bytes
+</span><span>read 0 bytes
+</span><span>Wrote 0 bytes
+</span><span>read 0 bytes
+</span><span>Wrote 0 bytes
+</span><span>read 0 bytes
+</span><span>Wrote 0 bytes
+</span><span>read 0 bytes
+</span><span>...
+</span></code></pre>
+<h2 id="whats-up-with-the-zero-byte-buffer">Whats Up With the Zero Byte Buffer?</h2>
+<p>Well, that is something...</p>
+<p>What is happening here is some convention surrounding Rusts buffers (At least those that implement the <a href="https://doc.rust-lang.org/std/io/trait.Read.html#">Read</a> trait) that isn't exactly obvious. </p>
+<p>If you go down the buffer rabbit hole far enough, you will find this rather vauge description on <code>std::io::Read</code>'s doc page:</p>
+<blockquote>
+<p>If the return value of this method is Ok(n), then implementations must guarantee that 0 &lt;= n &lt;= buf.len(). A nonzero n value indicates that the buffer buf has been filled in with n bytes of data from this source. If n is 0, then it can indicate one of two scenarios:</p>
+<ol>
+<li>This reader has reached its “end of file” and will likely no longer be able to produce bytes. Note that this does not mean that the reader will always no longer be able to produce bytes. As an example, on Linux, this method will call the recv syscall for a TcpStream, where returning zero indicates the connection was shut down correctly. While for File, it is possible to reach the end of file and get zero as result, but if more data is appended to the file, future calls to read will return more data.</li>
+<li>The buffer specified was 0 bytes in length.</li>
+</ol>
+</blockquote>
+<p>What this usually means in the context of a TCPStream, is that the other side closed the connection. When the TCPStream on the client side falls out of scope as the client unwinds, it 
+closes It's side. Since the buffer for the TCPStream will no longer produce any more bytes, it is considered closed. In <em>most</em> cases, you can interpret an <code>Ok(0)</code> result from this
+method as a graceful disconnect. So lets modify the match block to reflect that.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">if</span><span> ready.</span><span style="color:#96b5b4;">is_readable</span><span>() {
+</span><span>            buf = [</span><span style="color:#d08770;">0</span><span>; </span><span style="color:#d08770;">1024</span><span>];
+</span><span>            </span><span style="color:#b48ead;">match</span><span> stream.</span><span style="color:#96b5b4;">try_read</span><span>(&amp;</span><span style="color:#b48ead;">mut</span><span> buf) {
+</span><span>                Ok(</span><span style="color:#d08770;">0</span><span>) =&gt; {
+</span><span>                    println!(&quot;</span><span style="color:#a3be8c;">Client disconnected</span><span>&quot;);
+</span><span>                    </span><span style="color:#b48ead;">return </span><span>Ok(());
+</span><span>                }
+</span><span>                Ok(n) =&gt; {
+</span><span>                    println!(&quot;</span><span style="color:#a3be8c;">read </span><span style="color:#d08770;">{}</span><span style="color:#a3be8c;"> bytes</span><span>&quot;, n);
+</span><span>                    </span><span style="color:#b48ead;">let mut</span><span> result_buffer: Vec&lt;</span><span style="color:#b48ead;">u8</span><span>&gt; = Vec::with_capacity(n);
+</span><span>                    buf.</span><span style="color:#96b5b4;">take</span><span>(n as </span><span style="color:#b48ead;">u64</span><span>).</span><span style="color:#96b5b4;">read_to_end</span><span>(&amp;</span><span style="color:#b48ead;">mut</span><span> result_buffer).await?;
+</span><span>                    reply_queue.</span><span style="color:#96b5b4;">push</span><span>(result_buffer.</span><span style="color:#96b5b4;">to_vec</span><span>());
+</span><span>                }
+</span><span>                Err(</span><span style="color:#b48ead;">ref</span><span> e) </span><span style="color:#b48ead;">if</span><span> e.</span><span style="color:#96b5b4;">kind</span><span>() == io::ErrorKind::WouldBlock =&gt; {
+</span><span>                    </span><span style="color:#b48ead;">continue</span><span>;
+</span><span>                }
+</span><span>                Err(e) =&gt; {
+</span><span>                    </span><span style="color:#b48ead;">return </span><span>Err(e.</span><span style="color:#96b5b4;">into</span><span>());
+</span><span>                }
+</span><span>            }
+</span><span>        }
+</span></code></pre>
+<p>Now, when we get a 0 length buffer from the <code>try_read</code> method, the TCPStream handler method will exit, and all of its connections and buffers
+will be automatically cleaned up as they fall out of scope.</p>
+<p>Lets run the example code again:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span>Connection from </span><span style="color:#d08770;">127.0</span><span>.</span><span style="color:#d08770;">0.1</span><span>:</span><span style="color:#d08770;">58682
+</span><span>read </span><span style="color:#d08770;">6</span><span> bytes
+</span><span>Wrote </span><span style="color:#d08770;">6</span><span> bytes
+</span><span>Client disconnected
+</span></code></pre>
+<p>While this behavior isn't very intuitive to people not already familiar, it can be dealt with in a pretty succinct way. And, as you can see, now that you know what it 
+means you have a program that will reliably handle all manner of connections, disconnections, reconnections, etc without having to address all those specific cases.</p>
+<h1 id="some-other-pitfalls">Some Other Pitfalls</h1>
+<h2 id="wait-how-did-i-just-send-data-to-a-disconnected-host">Wait, How Did I Just Send Data to a Disconnected Host?</h2>
+<p>Well, the short answer is, you didn't. It just looked like you did.</p>
+<p>Imagine this scenario:</p>
+<p>Two systems have a long-running TCP Connection between them. </p>
+<p>The server crashes or otherwise loses it's connection to the client.</p>
+<p>The client then sends some data via the <code>try_write</code> method, which succeeds. What the heck?</p>
+<p>Well, what we've succeeded in doing is writing data into a kernel networking buffer on a stream that, as far as the kernel is concerned, is still alive and healthy.</p>
+<p>Networking problems are not uncommon, and many of them are recoverable. TCP is a protocol that, as mentioned in the intro, is capable of retrying and retransmitting lost data.
+This takes time though, and by the time the complete retransmission process has finished, our program will have long moved on to another context (assuming it isn't blocking on 
+IO, which as previously established, is a bad thing.)</p>
+<p>How has the kernel not realized there is a problem yet?</p>
+<p>Well, in the case of Linux, the answer is hiding in proc:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>$ cat /proc/sys/net/ipv4/tcp_keepalive_time
+</span><span>7200
+</span><span>$ cat /proc/sys/net/ipv4/tcp_keepalive_probes 
+</span><span>9
+</span><span>$ cat /proc/sys/net/ipv4/tcp_keepalive_intvl 
+</span><span>75
+</span></code></pre>
+<p>These are generally the default values for the three parameters of a TCP Connection that govern detecting failed connections.</p>
+<p>As is so excellently explained by <a href="https://en.wikipedia.org/wiki/Keepalive">wikipedia</a>:</p>
+<blockquote>
+<ul>
+<li>Keepalive time is the duration between two keepalive transmissions in idle condition. TCP keepalive period is required to be configurable and by default is set to no less than 2 hours.</li>
+<li>Keepalive interval is the duration between two successive keepalive retransmissions, if acknowledgement to the previous keepalive transmission is not received.</li>
+<li>Keepalive retry is the number of retransmissions to be carried out before declaring that remote end is not available</li>
+</ul>
+</blockquote>
+<p>So, in the case of an idle connection, it will take more than 2 hours for a TCP connection to be considered failed, at which point calling <code>try_write</code> will result in an IOError.</p>
+<p>But, there is something we can do about it. Upon creating TCP Connections, the Kernel will allow us to pass in our own values for each of these settings. Unfortunately, Tokio doesn't provide convenience methods for these as far as I can tell, so we need to do a little bit of excessive type conversions:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">let</span><span> stream = TcpStream::connect(&amp;socket_addr_string).await.</span><span style="color:#96b5b4;">unwrap</span><span>()
+</span><span style="color:#b48ead;">let</span><span> stream: std::net::TcpStream = stream.</span><span style="color:#96b5b4;">into_std</span><span>().</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span style="color:#b48ead;">let</span><span> socket: socket2::Socket = socket2::Socket::from(stream);
+</span><span style="color:#b48ead;">let</span><span> keepalive = TcpKeepalive::new()
+</span><span>    .</span><span style="color:#96b5b4;">with_time</span><span>(Duration::from_secs(</span><span style="color:#d08770;">10</span><span>))
+</span><span>    .</span><span style="color:#96b5b4;">with_interval</span><span>(Duration::from_secs((</span><span style="color:#d08770;">5</span><span>));
+</span><span>socket.</span><span style="color:#96b5b4;">set_tcp_keepalive</span><span>(&amp;keepalive).</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span><span style="color:#b48ead;">let</span><span> stream: std::net::TcpStream = socket.</span><span style="color:#96b5b4;">into</span><span>();
+</span><span style="color:#b48ead;">let</span><span> stream: tokio::net::TcpStream = tokio::net::TcpStream::from_std(stream).</span><span style="color:#96b5b4;">unwrap</span><span>();
+</span></code></pre>
+<p>While TCP Keepalive is a pretty low-overhead operation, bear in mind that you probably don't want to set a one-second interval on a service
+that maintains tens of thousands of connections.</p>
+<p>Now, I do hear a few of you yelling at your monitor that I should have just constructed the socket using a <code>socket2</code> builder in the first place, but I disagree because of...</p>
+<h2 id="dns-lookups-and-socket-address-type-conversions">DNS Lookups and Socket Address Type Conversions</h2>
+<p>One thing you may want to keep in mind, especially if you are going to implement connection retry functionality into your program, is where your DNS lookups take place.
+In a robust long-running daemon, you probably want to perform a DNS lookup on each successive connection, otherwise you may not discover until restarting your application
+that the DNS records on the other side changed. This can result in really annoying behavior that frustrates operators.</p>
+<p>So, where do DNS lookups take place?</p>
+<p>A big clue can be gleaned by looking at the <a href="https://doc.rust-lang.org/std/net/enum.SocketAddr.html">SocketAddr</a> type:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">pub enum </span><span>SocketAddr {
+</span><span>    </span><span style="color:#d08770;">V4</span><span>(SocketAddrV4),
+</span><span>    </span><span style="color:#d08770;">V6</span><span>(SocketAddrV6),
+</span><span>}
+</span></code></pre>
+<p>Sure enough, there is no such thing as a <code>SocketAddr</code> that contains a DNS name, it must either be an IPv4 or IPv6 address + destination port. So, we can safely assume
+that any time we convert from an address string to a <code>SocketAddr</code>, a DNS lookup must take place. This is one place where it is very easy for blocking IO to sneak it's 
+way into your otherwise async application. For instance, if you construct a socket in a non-async framework, and then convert it to an async socket, you may have performed
+a non-async DNS lookup.</p>
+<p>Now, in some cases you may want the lookup to only be performed once, in which case feel free to stick a conversion from string to <code>SocketAddr</code> directly in your <a href="https://docs.rs/clap/latest/clap/">clap</a> arguments, in which case your application will perform exactly one DNS lookup when the arguments are parsed and converted.</p>
+<p>But, if that isn't the behavior you want, feel free to keep passing around you addresses as strings (or another intermediary type) for a bit longer.</p>
+<h1 id="closing">Closing</h1>
+<p>Don't be intimidated by lower level network protocols in Rust, or any language really. While they tend to require a little more work to get right than, say a HTTP REST call, they still have
+their place in modern software engineering. Especially if you have a lot of data you need to get somewhere really fast with as little overhead as possible. </p>
+<p>Just bear in mind, there are definitely some ways to shoot yourself in the foot. So make sure you test well, and have a basic understanding of what is actually going on 
+with the magical data portal that is a TCPStream.</p>
+<p>You can access the complete source code used as an example <a href="https://github.com/graysonhead/rust-tcp-tutorial">here</a>.</p>
+
+        </section>
+
+        
+            <div class="post-tags">
+                <nav class="nav tags">
+                    <ul class="tags">
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/rust/>Rust</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/networking/>Networking</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/tcp/>TCP</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/tutorials/>Tutorials</a></li>
+                        
+                    </ul>
+                </nav>
+            </div>
+        
+
+    </article>
+</main>
+
+
+
+        <footer>
+	<div style="display:flex">
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;github.com&#x2F;graysonhead title=GitHub>
+	         <i data-feather=github></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;hachyderm.io&#x2F;@Darkside title=Mastadon>
+	         <i data-feather=globe></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;www.linkedin.com&#x2F;in&#x2F;graysonhead&#x2F; title=LinkedIn>
+	         <i data-feather=linkedin></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;pixel.tchncs.de&#x2F;i&#x2F;web title=PixelFed>
+	         <i data-feather=camera></i>
+	     </a>
+	 
+	 </div>
+	 <div class="footer-info">
+	 2026 © Grayson Head
+        </div>
+</footer>
+
+
+<script>
+	    feather.replace();
+</script>
+
+
+    </div>
+</body>
+
+</html>

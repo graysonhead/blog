@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+
+    
+    <title>
+         Mapping Tomorrow&#x27;s Crash Sites Today
+        
+    </title>
+
+    
+    <meta property="og:title"
+        content="Mapping Tomorrow&#x27;s Crash Sites Today" />
+    
+    
+
+    
+    
+    
+
+    
+    
+    
+
+    
+
+    
+
+    
+
+    
+    
+    <script src=https://blog.graysonhead.net/js/feather.min.js></script>
+    
+
+
+    
+    <link href=https://blog.graysonhead.net/css/fonts.css rel="stylesheet" />
+    
+
+    <link rel="stylesheet" type="text/css" media="screen" href=https://blog.graysonhead.net/css/main.css />
+
+    
+    <link rel="stylesheet" id="darkModeStyle" type="text/css" href=https://blog.graysonhead.net/css/dark.css   />
+    
+
+
+    
+
+
+</head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-CCTJX63WS9"></script>
+<script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    gtag('js', new Date());
+
+    gtag('config', 'G-CCTJX63WS9');
+</script>
+
+<body>
+    <div class="content">
+        <header>
+    <div class="main" id="main_title">
+        <a href=https:&#x2F;&#x2F;blog.graysonhead.net></a>
+    </div>
+
+    <nav>
+        
+            <a href=&#x2F;posts>&#x2F;posts</a>
+        
+            <a href=&#x2F;projects>&#x2F;projects</a>
+        
+            <a href=&#x2F;about>&#x2F;about</a>
+        
+
+        
+            |
+
+            
+                <a href=&#x2F;>en</a>
+            
+        
+
+        
+    </nav>
+</header>
+
+
+        
+    
+<main>
+    <article>
+        <div class="title">
+            <h1 class="title">Mapping Tomorrow&#x27;s Crash Sites Today</h1>
+            <div class="meta">
+                
+                on  2026-02-04
+
+                
+            </div>
+        </div>
+
+        
+
+        <section class="body">
+            <!-- <img src="../../images/field_finder_gis_header.png" alt="A screenshot showing a route and a bunch of green squares" /> -->
+<p>In the case of engine failure, how screwed are you?</p>
+<p>As of the time of writing, most of my flight experience has been in single-engine aircraft over a particularly flat and reasonably unobstructed part of central Texas. There are a bunch of nice farmers around to maintain emergency runways (though, annoyingly, they do tend to plant crops on them). Doing simulated engine failures and fires over our practice area is pretty hard to mess up. Just point the aircraft in a random direction, and chances are there will be a large flat field there.</p>
+<img src="../../images/plenty_of_fields.jpg" alt="Picture taken from a piper archer in an area north of Georgetown showing a ton of fields" />
+<p>But, heading back towards our home airport (KGTU), that quickly changes as you cross I-35 and descend to pattern altitude. What was fields only a few miles ago is now densely wooded areas, neighborhoods, and warehouses. At pattern altitude, you have some options (most notably the runway). But taking off from all but one runway, the only realistic options you have below turnback altitude are trying to get to I-35 and its associated medians and clearings (which you probably won't), or landing in the treetops.</p>
+<h1 id="a-brief-aside-crash-survivability">A Brief Aside: Crash Survivability</h1>
+<p>This is a post about an interesting experiment I did with GIS data, not about aviation safety. But since the subject matter involves forced landings, a small PSA is in order. As someone who's both risk-avoidant and drawn to aviation, I'm naturally inclined to think through worst-case scenarios. I find that understanding the edge cases makes the activity less intimidating, not more. So when the emergency procedure says &quot;select an adequate field for landing,&quot; I had to wonder: what happens when there isn't one?</p>
+<p>A few years ago, a small plane experienced an engine failure a ways out from KGTU, and landed short of the runway, into a house:</p>
+<img src="../../images/plane_in_house.avif" alt="Picture showing a Beech BE35 sticking out of a townhome" />
+<p>You might be surprised to learn that the three occupants of this plane survived, sustaining reasonably minor, non-life-threatening injuries. And this illustrates an important point: if you do happen to find yourself in a bad situation where no well manicured perfectly level fields are available, you are far from dead.</p>
+<p>Forced landings in inhospitable environments (rough terrain, trees, etc.) are quite survivable <em>when executed properly</em>. Some sources would put the rate of survival somewhere in the 90-97% range <sup class="footnote-reference"><a href="#1">1</a></sup>, which is similar to the survival rate of ditching in water. But ditching in treetops or other inhospitable environments does carry a significant chance of injury. To make things simple, you can assume the chances of a moderate to serious injury when landing in a dense wooded area are probably about 50/50.</p>
+<p>Single-engine aircraft stall at low speeds by design, which means lower impact energy when you hit the ground. Certification standards used to mandate low stall speeds for this reason, though these requirements were revised around 2017. This characteristic, combined with structural requirements<sup class="footnote-reference"><a href="#6">2</a></sup> for withstanding abrupt deceleration, means you can land into or onto quite a lot of things with a reasonable chance of survival. Just don't stall and spin. If you lose control and enter a spin, you're likely hitting the ground at 100 knots or more instead of a controlled 50 knots. Get as slow as you can without stalling, and land into the wind if possible. A headwind reduces your groundspeed, which means less energy you will need to dissipate on the ground. And in the words of Bob Hoover, fly the plane as far into the crash as you can. Do this, and your odds of survival are pretty good.</p>
+<p>But it is probably going to hurt.</p>
+<p>Aircraft engines are surprisingly reliable. So long as you are aware of the risks, and know what needs to be done to survive, I wouldn't judge those who chose to fly over inhospitable terrain in single engine aircraft. After all, you could make an argument that a sizeable portion of Alaska's transportation infrastructure is just that.</p>
+<p>But there are also plenty of ways to manage this risk. I like to take a gander in Google Earth and see what was around the airports I fly between to see if there is cause for concern. And for the most part I was just looking for areas with flat land, with no trees or structures. And what follows is really just a stream-lined version of that.</p>
+<p>After smashing together a few different publicly available data-sets, I wound up with what I think is a fairly accurate guess of <em>safer</em> forced landing options. And while I was at it, I made a tool to query this data (and it has a few other neat tricks too).</p>
+<h1 id="gis-data-sources">GIS Data Sources</h1>
+<p>First, we need elevation data. I'm using the <a href="https://www.earthdata.nasa.gov/data/alerts-outages/shuttle-radar-topography-mission-version-3-0-srtm-plus-product-release">SRTMv3</a> dataset. For those who don't know, most of the data in this set came from a really neat space shuttle mission, STS-99, on the Space Shuttle Endeavour. The data was generated via an interferometric synthetic aperture radar attached to the shuttle. </p>
+<p>The dataset is available in 3 arcsecond (about 30 meters) or 1 arcsecond (about 10 meters). I'm using the 1 arcsecond DEM simply because I already have it downloaded for another project.</p>
+<p>The second dataset we need is the <a href="https://www.usgs.gov/centers/eros/science/national-land-cover-database">National Land Cover Database</a> (NLCD). The NLCD covers the contiguous United States, and provides land cover information at a fairly high resolution.</p>
+<p>The NLCD classifies land cover into a number of classes:</p>
+<ul>
+<li>Open Water</li>
+<li>Perennial Ice &amp; Snow</li>
+<li>Developed
+<ul>
+<li>Open Space</li>
+<li>Low Intensity</li>
+<li>Medium Intensity</li>
+<li>High Intensity</li>
+</ul>
+</li>
+<li>Barren Land</li>
+<li>Forest
+<ul>
+<li>Deciduous</li>
+<li>Evergreen</li>
+<li>Mixed</li>
+</ul>
+</li>
+<li>Shrub/Scrub</li>
+<li>Grassland/Herbaceous</li>
+<li>Pasture/Hay</li>
+<li>Cultivated Crops</li>
+<li>Woody Wetlands</li>
+<li>Emergent Herbaceous Wetlands</li>
+</ul>
+<p>This gets us a long way towards our goal, as we can eliminate a lot of options that typically don't make good landing sites (Developed land, Forests, Wetlands). And also, to an extent, prioritize the better options. i.e., Cultivated Crops -&gt; Pasture/Grassland -&gt; Barren. </p>
+<p>Lastly, I needed data on airports and navaids. This comes from <a href="https://ourairports.com/data/">ourairports.com</a>. This is, frankly, not the best dataset. It is by far the easiest to use, but there were a lot of inaccuracies for airports near me (I did make an account and correct the ones I knew about, but I'm sure there are more).</p>
+<p>I'd love to eventually integrate a more official source, like the FAA ADIP API (assuming I can figure out how to even get access to it).</p>
+<h1 id="the-pipeline">The Pipeline</h1>
+<p>We have a few goals with our processing pipeline:</p>
+<p>We want to find runway-like surfaces. These are surfaces that are flat and free from obstruction. The data we have so far can't guarantee that we will find surfaces free from obstruction, but based on land cover classification, they can give us a decent guess. Part of the goal here is an interactive briefing tool that will allow pilots to inspect potential landing areas, and streamline the process, so this isn't necessarily a problem. Plus, I'm sure I'll think of other ways to further refine this dataset in the future.</p>
+<p>So let's focus on the first objective: finding flat areas.</p>
+<p>The SRTM dataset is divided into 1°x1° tiles, so these will be our unit of work. I wrote a pipeline-runner binary in rust that will perform each processing step on a per-tile basis. This pipeline writes to various PostGIS tables that represent each step of data refinement, and this allows us to use a lot of native PostGIS functions (which are highly optimized) to help us process our data more easily. We also use Rust <a href="https://gdal.org/en/stable/">GDAL</a> bindings for certain steps as well.</p>
+<p>A very easy data source to work with is a raster Digital Elevation Model (DEM). These are usually <code>.tif</code> files (such as in the case of the SRTM3 dataset), though they can really be in any image format (since they are a simple raster). The point is, the band value (usually there is only one band in a DEM, since they usually only encode elevation) corresponds to elevation (and the metadata will help you derive the actual elevation from this value). Here is a render of a DEM .tif from a sampled version of the SRTM3 dataset, centered around Austin, Texas:</p>
+<img src="../../images/field_finder/dem_austin.png" alt="Rendering of a DEM file from the SRTM3 dataset showing elevation near Austin, Texas" />
+<p>In this rendering, darker areas are lower altitudes, and lighter areas are higher altitudes. One easy thing about working with the SRTM3 data is that the datum is the EGM96 geoid, which approximates Mean Sea level. We would need to be careful if we were working with a dataset using the WGS84 ellipsoid as a datum, as we would need to correct each altitude. Fortunately, aviation charts and such are already using MSL and as such we are in the same conceptual space for altitudes without any conversions (besides feet to meters). For more information on the difference between Ellipsoid and Geoid datums, ESRI has a good explanation <a href="https://www.esri.com/about/newsroom/arcuser/mean-sea-level-gps-geoid">here</a>.</p>
+<p>Now we are going to reference this same DEM a few steps down the road, but for now what we care about is finding areas with unacceptable slopes. I picked 8% grade as the rough level of slope I want to exclude (it's configurable, and I'm not sure this is the correct number, but it was a good place to start). I tried this a few different ways, but the way that worked best from a performance standpoint was to take each DEM tile and turn it into an exclusion mask, by comparing adjacent pixels in the raster and figuring out if their slope was greater than 8%. </p>
+<p>To get this, we first need to turn the raster of elevations into a raster of slopes:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#65737e;">/// Generate a slope raster from a DEM using gdaldem
+</span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">generate_slope_raster</span><span>&lt;P: AsRef&lt;Path&gt;, Q: AsRef&lt;Path&gt;&gt;(
+</span><span>    </span><span style="color:#bf616a;">dem_path</span><span>: P,
+</span><span>    </span><span style="color:#bf616a;">output_path</span><span>: Q,
+</span><span>) -&gt; Result&lt;()&gt; {
+</span><span>    log::info!(&quot;</span><span style="color:#a3be8c;">Generating slope raster...</span><span>&quot;);
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">let</span><span> output = Command::new(&quot;</span><span style="color:#a3be8c;">gdaldem</span><span>&quot;)
+</span><span>        .</span><span style="color:#96b5b4;">arg</span><span>(&quot;</span><span style="color:#a3be8c;">slope</span><span>&quot;)
+</span><span>        .</span><span style="color:#96b5b4;">arg</span><span>(dem_path.</span><span style="color:#96b5b4;">as_ref</span><span>())
+</span><span>        .</span><span style="color:#96b5b4;">arg</span><span>(output_path.</span><span style="color:#96b5b4;">as_ref</span><span>())
+</span><span>        .</span><span style="color:#96b5b4;">arg</span><span>(&quot;</span><span style="color:#a3be8c;">-p</span><span>&quot;) </span><span style="color:#65737e;">// Output as percentage
+</span><span>        .</span><span style="color:#96b5b4;">arg</span><span>(&quot;</span><span style="color:#a3be8c;">-compute_edges</span><span>&quot;)
+</span><span>        .</span><span style="color:#96b5b4;">arg</span><span>(&quot;</span><span style="color:#a3be8c;">-of</span><span>&quot;).</span><span style="color:#96b5b4;">arg</span><span>(&quot;</span><span style="color:#a3be8c;">GTiff</span><span>&quot;)
+</span><span>        .</span><span style="color:#96b5b4;">output</span><span>()
+</span><span>        .</span><span style="color:#96b5b4;">context</span><span>(&quot;</span><span style="color:#a3be8c;">Failed to execute gdaldem</span><span>&quot;)?;
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">if </span><span>!output.status.</span><span style="color:#96b5b4;">success</span><span>() {
+</span><span>        </span><span style="color:#b48ead;">let</span><span> stderr = String::from_utf8_lossy(&amp;output.stderr);
+</span><span>        anyhow::bail!(&quot;</span><span style="color:#a3be8c;">gdaldem slope failed: {}</span><span>&quot;, stderr);
+</span><span>    }
+</span><span>
+</span><span>    log::info!(&quot;</span><span style="color:#a3be8c;">Slope raster generated: {:?}</span><span>&quot;, output_path.</span><span style="color:#96b5b4;">as_ref</span><span>());
+</span><span>    Ok(())
+</span><span>}
+</span></code></pre>
+<p>Then we turn this into a binary mask where 1 are &quot;acceptable areas&quot; with slopes &lt; threshold, and 0 otherwise:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#65737e;">/// Create a binary slope mask (1 where slope &lt; threshold, 0 otherwise)
+</span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">create_slope_mask</span><span>&lt;P: AsRef&lt;Path&gt;, Q: AsRef&lt;Path&gt;&gt;(
+</span><span>    </span><span style="color:#bf616a;">slope_path</span><span>: P,
+</span><span>    </span><span style="color:#bf616a;">output_path</span><span>: Q,
+</span><span>    </span><span style="color:#bf616a;">max_slope_percent</span><span>: </span><span style="color:#b48ead;">f64</span><span>,
+</span><span>) -&gt; Result&lt;()&gt; {
+</span><span>    log::info!(&quot;</span><span style="color:#a3be8c;">Creating slope mask (threshold: {}%)...</span><span>&quot;, max_slope_percent);
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// Use gdal_calc.py to create binary mask
+</span><span>    </span><span style="color:#65737e;">// Result is 1 where slope &lt; threshold, 0 otherwise
+</span><span>    </span><span style="color:#b48ead;">let</span><span> calc_expr = format!(&quot;</span><span style="color:#a3be8c;">(A&lt;</span><span style="color:#d08770;">{}</span><span style="color:#a3be8c;">).astype(numpy.uint8)</span><span>&quot;, max_slope_percent);
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">let</span><span> output = Command::new(&quot;</span><span style="color:#a3be8c;">gdal_calc.py</span><span>&quot;)
+</span><span>        .</span><span style="color:#96b5b4;">arg</span><span>(&quot;</span><span style="color:#a3be8c;">-A</span><span>&quot;).</span><span style="color:#96b5b4;">arg</span><span>(slope_path.</span><span style="color:#96b5b4;">as_ref</span><span>())
+</span><span>        .</span><span style="color:#96b5b4;">arg</span><span>(format!(&quot;</span><span style="color:#a3be8c;">--outfile=</span><span style="color:#d08770;">{}</span><span>&quot;, output_path.</span><span style="color:#96b5b4;">as_ref</span><span>().</span><span style="color:#96b5b4;">display</span><span>()))
+</span><span>        .</span><span style="color:#96b5b4;">arg</span><span>(format!(&quot;</span><span style="color:#a3be8c;">--calc=</span><span style="color:#d08770;">{}</span><span>&quot;, calc_expr))
+</span><span>        .</span><span style="color:#96b5b4;">arg</span><span>(&quot;</span><span style="color:#a3be8c;">--type=Byte</span><span>&quot;)
+</span><span>        .</span><span style="color:#96b5b4;">arg</span><span>(&quot;</span><span style="color:#a3be8c;">--NoDataValue=0</span><span>&quot;)
+</span><span>        .</span><span style="color:#96b5b4;">arg</span><span>(&quot;</span><span style="color:#a3be8c;">--quiet</span><span>&quot;)
+</span><span>        .</span><span style="color:#96b5b4;">arg</span><span>(&quot;</span><span style="color:#a3be8c;">--overwrite</span><span>&quot;)
+</span><span>        .</span><span style="color:#96b5b4;">output</span><span>()
+</span><span>        .</span><span style="color:#96b5b4;">context</span><span>(&quot;</span><span style="color:#a3be8c;">Failed to execute gdal_calc.py</span><span>&quot;)?;
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">if </span><span>!output.status.</span><span style="color:#96b5b4;">success</span><span>() {
+</span><span>        </span><span style="color:#b48ead;">let</span><span> stderr = String::from_utf8_lossy(&amp;output.stderr);
+</span><span>        anyhow::bail!(&quot;</span><span style="color:#a3be8c;">gdal_calc.py mask creation failed: {}</span><span>&quot;, stderr);
+</span><span>    }
+</span><span>
+</span><span>    log::info!(&quot;</span><span style="color:#a3be8c;">Slope mask created: {:?}</span><span>&quot;, output_path.</span><span style="color:#96b5b4;">as_ref</span><span>());
+</span><span>    Ok(())
+</span><span>}
+</span></code></pre>
+<p>What you wind up with, is something that looks like this:</p>
+<img src="../../images/field_finder/slope_mask.png" alt="Rendering of an example slope mask near Austin, Texas" />
+<p>This gives us a very efficient way to exclude areas from the next step while we are still working with rasters.</p>
+<p>So we've taken care of flat, now we need to move on to the next thing: ground cover.</p>
+<p>To start, we're going to take the NLCD (which is also a raster) and multiply it by our mask. Since any value with an unacceptable slope will be a &quot;0&quot; value in the mask, those areas will be effectively eliminated from the NLCD raster:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#65737e;">/// Apply mask to raster (multiply raster by mask)
+</span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">apply_mask_to_raster</span><span>&lt;P: AsRef&lt;Path&gt;, Q: AsRef&lt;Path&gt;, R: AsRef&lt;Path&gt;&gt;(
+</span><span>    </span><span style="color:#bf616a;">raster_path</span><span>: P,
+</span><span>    </span><span style="color:#bf616a;">mask_path</span><span>: Q,
+</span><span>    </span><span style="color:#bf616a;">output_path</span><span>: R,
+</span><span>) -&gt; Result&lt;()&gt; {
+</span><span>    log::info!(&quot;</span><span style="color:#a3be8c;">Applying mask to NLCD...</span><span>&quot;);
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// Use gdal_calc.py to multiply raster by mask
+</span><span>    </span><span style="color:#65737e;">// Where mask is 0 (steep slope), result will be 0 (NoData for NLCD)
+</span><span>    </span><span style="color:#b48ead;">let</span><span> output = Command::new(&quot;</span><span style="color:#a3be8c;">gdal_calc.py</span><span>&quot;)
+</span><span>        .</span><span style="color:#96b5b4;">arg</span><span>(&quot;</span><span style="color:#a3be8c;">-A</span><span>&quot;).</span><span style="color:#96b5b4;">arg</span><span>(raster_path.</span><span style="color:#96b5b4;">as_ref</span><span>())
+</span><span>        .</span><span style="color:#96b5b4;">arg</span><span>(&quot;</span><span style="color:#a3be8c;">-B</span><span>&quot;).</span><span style="color:#96b5b4;">arg</span><span>(mask_path.</span><span style="color:#96b5b4;">as_ref</span><span>())
+</span><span>        .</span><span style="color:#96b5b4;">arg</span><span>(format!(&quot;</span><span style="color:#a3be8c;">--outfile=</span><span style="color:#d08770;">{}</span><span>&quot;, output_path.</span><span style="color:#96b5b4;">as_ref</span><span>().</span><span style="color:#96b5b4;">display</span><span>()))
+</span><span>        .</span><span style="color:#96b5b4;">arg</span><span>(&quot;</span><span style="color:#a3be8c;">--calc=A*B</span><span>&quot;)
+</span><span>        .</span><span style="color:#96b5b4;">arg</span><span>(&quot;</span><span style="color:#a3be8c;">--type=Byte</span><span>&quot;)
+</span><span>        .</span><span style="color:#96b5b4;">arg</span><span>(&quot;</span><span style="color:#a3be8c;">--NoDataValue=0</span><span>&quot;)
+</span><span>        .</span><span style="color:#96b5b4;">arg</span><span>(&quot;</span><span style="color:#a3be8c;">--quiet</span><span>&quot;)
+</span><span>        .</span><span style="color:#96b5b4;">arg</span><span>(&quot;</span><span style="color:#a3be8c;">--overwrite</span><span>&quot;)
+</span><span>        .</span><span style="color:#96b5b4;">output</span><span>()
+</span><span>        .</span><span style="color:#96b5b4;">context</span><span>(&quot;</span><span style="color:#a3be8c;">Failed to execute gdal_calc.py</span><span>&quot;)?;
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">if </span><span>!output.status.</span><span style="color:#96b5b4;">success</span><span>() {
+</span><span>        </span><span style="color:#b48ead;">let</span><span> stderr = String::from_utf8_lossy(&amp;output.stderr);
+</span><span>        anyhow::bail!(&quot;</span><span style="color:#a3be8c;">gdal_calc.py mask application failed: {}</span><span>&quot;, stderr);
+</span><span>    }
+</span><span>
+</span><span>    log::info!(&quot;</span><span style="color:#a3be8c;">Mask applied: {:?}</span><span>&quot;, output_path.</span><span style="color:#96b5b4;">as_ref</span><span>());
+</span><span>    Ok(())
+</span><span>}
+</span></code></pre>
+<p>Now what we have is an NLCD raster with empty areas where the slope was too great. But to serve this efficiently to clients, we should deliver this data as individual polygons in GeoJSON as opposed to an image. This would allow us to preserve the accuracy of the dataset while also optimizing how we query and further refine it.</p>
+<p>I'm going to gloss over this next part—apologies in advance. To put it simply, I'm using the <code>GDALPolygonize</code> FFI from the <a href="https://docs.rs/gdal-sys/0.12.0/gdal_sys/">gdal_sys</a> crate, but there is a lot more to it than that unfortunately and I'm not going to unpack it here. The good news is, you can get a decent result just by running the function on a raster. But if you want to optimize the resultant geometries for easy querying/spatial indexing/processing, you are going to spend a lot of time figuring out sieve filters and subdividing large contiguous blocks of land when appropriate. None of it is hard, but it is a bit tedious and requires a lot of experimentation. </p>
+<p>But what I eventually wound up with, was an NLCD vector that looks somewhat like this:</p>
+<img src="../../images/field_finder/nlcd_vector.png" alt="Rendering of a vectorized NLCD dataset near Austin, Texas" />
+<p>Now we need to figure out the dimensions of our newly generated vectors. Specifically, we are looking for at least a 2500ft long 50ft wide path contained within each vector for it to qualify as a potentially landable area.</p>
+<p>To do this, we are going to sample 200 points from the polygon's geometry, and check each pair to see if:</p>
+<ul>
+<li>It is longer than the minimum candidate distance (currently 2500 feet, but configurable)</li>
+<li>It is longer than the best one we've already found</li>
+<li>Verify that the entire length of the segment is entirely contained within the geometry of the polygon</li>
+</ul>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#65737e;">/// Find the longest line segment entirely contained within a single polygon
+</span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">find_longest_interior_segment</span><span>(
+</span><span>    </span><span style="color:#bf616a;">polygon</span><span>: &amp;Polygon&lt;</span><span style="color:#b48ead;">f64</span><span>&gt;,
+</span><span>    </span><span style="color:#bf616a;">min_width_degrees</span><span>: </span><span style="color:#b48ead;">f64</span><span>,
+</span><span>) -&gt; Result&lt;Option&lt;(LineString&lt;</span><span style="color:#b48ead;">f64</span><span>&gt;, </span><span style="color:#b48ead;">f64</span><span>)&gt;&gt; {
+</span><span>    </span><span style="color:#65737e;">// Sample points along the polygon boundary
+</span><span>    </span><span style="color:#b48ead;">let</span><span> boundary_points = </span><span style="color:#96b5b4;">sample_boundary_points</span><span>(polygon, </span><span style="color:#d08770;">BOUNDARY_SAMPLES</span><span>)?;
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">if</span><span> boundary_points.</span><span style="color:#96b5b4;">len</span><span>() &lt; </span><span style="color:#d08770;">2 </span><span>{
+</span><span>        </span><span style="color:#b48ead;">return </span><span>Ok(None);
+</span><span>    }
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> best_segment: Option&lt;LineString&lt;</span><span style="color:#b48ead;">f64</span><span>&gt;&gt; = None;
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> best_length = </span><span style="color:#d08770;">0.0</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// Check all pairs of boundary points
+</span><span>    </span><span style="color:#b48ead;">for </span><span>(i, p1) in boundary_points.</span><span style="color:#96b5b4;">iter</span><span>().</span><span style="color:#96b5b4;">enumerate</span><span>() {
+</span><span>        </span><span style="color:#b48ead;">for</span><span> p2 in boundary_points.</span><span style="color:#96b5b4;">iter</span><span>().</span><span style="color:#96b5b4;">skip</span><span>(i + </span><span style="color:#d08770;">1</span><span>) {
+</span><span>            </span><span style="color:#65737e;">// Skip points that are too close together
+</span><span>            </span><span style="color:#b48ead;">let</span><span> pair_distance = </span><span style="color:#96b5b4;">distance</span><span>(p1, p2);
+</span><span>            </span><span style="color:#b48ead;">if</span><span> pair_distance &lt; </span><span style="color:#d08770;">MIN_CANDIDATE_DISTANCE </span><span>{
+</span><span>                </span><span style="color:#b48ead;">continue</span><span>;
+</span><span>            }
+</span><span>
+</span><span>            </span><span style="color:#65737e;">// Skip if this pair can&#39;t possibly beat our best
+</span><span>            </span><span style="color:#b48ead;">if</span><span> pair_distance &lt;= best_length {
+</span><span>                </span><span style="color:#b48ead;">continue</span><span>;
+</span><span>            }
+</span><span>
+</span><span>            </span><span style="color:#65737e;">// Create line segment between these boundary points
+</span><span>            </span><span style="color:#b48ead;">let</span><span> segment = LineString::from(vec![*p1, *p2]);
+</span><span>
+</span><span>            </span><span style="color:#65737e;">// Check if the segment is entirely within the polygon
+</span><span>            </span><span style="color:#65737e;">// We use a sampling approach since geo&#39;s Contains can be strict
+</span><span>            </span><span style="color:#b48ead;">if </span><span style="color:#96b5b4;">is_segment_inside_polygon</span><span>(&amp;segment, polygon) {
+</span><span>                </span><span style="color:#b48ead;">let</span><span> length = segment.</span><span style="color:#96b5b4;">euclidean_length</span><span>();
+</span><span>                </span><span style="color:#b48ead;">if</span><span> length &gt; best_length {
+</span><span>                    </span><span style="color:#65737e;">// Check width requirement by verifying perpendicular clearance
+</span><span>                    </span><span style="color:#b48ead;">if </span><span style="color:#96b5b4;">check_width_requirement</span><span>(&amp;segment, polygon, min_width_degrees) {
+</span><span>                        best_length = length;
+</span><span>                        best_segment = Some(segment);
+</span><span>                    }
+</span><span>                }
+</span><span>            }
+</span><span>        }
+</span><span>    }
+</span><span>
+</span><span>    Ok(best_segment.</span><span style="color:#96b5b4;">map</span><span>(|</span><span style="color:#bf616a;">s</span><span>| (s, best_length)))
+</span><span>}
+</span></code></pre>
+<p>And we can query the intermediate table with QGIS to see the output of this step:</p>
+<img src="../../images/field_finder/landable_lengths.png" alt="Rendering of potentially landable areas with the landable lengths rendered within them" />
+<p>This is, unfortunately, O(N²) at best. I had considered doing a rotating caliper or indexing by antipodals, but this would only work for mostly square shaped polygons. The current sampling plus brute force method handles shapes with holes in their internal geometry fairly well. And I'm not sure either of the other options would be as good:</p>
+<img src="../../images/field_finder/internal_geometry.png" alt="A landable area with some un-landable-areas inside it" />
+<p>Moreover, I don't mind spending the extra CPU cycles on this pipeline, because it will only be re-run whenever I change something about it, or when the datasets update (at most, annually). So it's really good enough as is, and the tradeoff is well worth it.</p>
+<p>When zoomed out, these segments create an interesting visualization that represents how contiguous the land cover areas are. Areas with more segments have more varied land cover, while long segments indicate areas of contiguous land cover.</p>
+<p>For instance, here is a portion of the Texas gulf coast<sup class="footnote-reference"><a href="#2">3</a></sup>:</p>
+<img src="../../images/field_finder/texas_gulf_coast_landable_segments.png" alt="Rendering of potentially landable along the Texas gulf coast" />
+<p>For those curious, the large area devoid of any landable segments in the top left of the map are the heavily urban parts of San Antonio.</p>
+<p>As previously mentioned, the unit of work is a 1x1 degree DEM raster, so we can iterate through this pipeline in small chunks. I've picked Texas as a test area (mostly because I'm familiar with the local geography). The dashboard below shows the progress of each tile's pipeline:</p>
+<img src="../../images/field_finder/segment_processing_dashboard.png" alt="Dashboard showing tile processing progress" />
+<p>And I'll go more into how the frontend works another day, but here is what the current (very primitive) interface looks like:</p>
+<img src="../../images/field_finder/kgtu_departure.png" alt="Image showing UI from the departure airport with landable areas" />
+<p>We have a place to enter a route string (it isn't correctly parsing all routes yet, but if your route only includes airfields and navaids in the Ourairports dataset, it should work fine). The line is rendered from the departure airport to the destination airport and is colored as so:</p>
+<ul>
+<li>Magenta, if you can glide to a runway</li>
+<li>Green, if you can glide to a landable_area <sup class="footnote-reference"><a href="#3">4</a></sup></li>
+<li>Red, if you can't glide to any landable_area</li>
+</ul>
+<p>Additionally, we are rendering an overlay of the actual landable areas. Green ones are ones we can reach at some point on our journey, Grey ones are out of range, but shown for context (i.e. you might choose to cruise at a higher altitude to reach a landing area farther away). </p>
+<p>But most importantly, this tool makes it easy to find areas where landable areas are sparse, and then visually check satellite imagery to see if they are viable or not<sup class="footnote-reference"><a href="#4">5</a></sup>:</p>
+<img src="../../images/field_finder/kgtu_zoomed.png" alt="Image showing UI zoomed in, so you can see the landable area outlines over satellite imagery." />
+<p>And, in this case at least, it does a pretty good job of highlighting areas that are viable in an otherwise urban/forested area. You will notice that there are some fields that aren't highlighted, but remember, we are rejecting any area without a 2500x50ft flat area.</p>
+<p>Looking at the arrival area, we can see an area of the flight where we would not be able to glide to any options, as we cross the Gulf Intracoastal Waterway:</p>
+<img src="../../images/field_finder/kras_arrival.png" alt="Image showing a stretch of the flight plan where we don't have any good ditching options over water." />
+<p>And the tool allows us to play some &quot;what if&quot; scenarios. In the original plan we had a pretty lazy 500fpm descent, what if we increase that to 800fpm? Sure enough, this gets rid of this period of risk and we can now glide to several options even as we are in the middle of the waterway.</p>
+<img src="../../images/field_finder/kras_800fpm.png" alt="Image showing a green segment where a red one previously was due to an increased rate of descent." />
+<p>You will notice there is a small red segment right as we get to the airport, this is there for several reasons. One, we don't assume that we arrive at the airport at pattern altitude to fly a pattern. I plan on eventually adding pattern entry logic to the <a href="https://pattern-visualizer.graysonhead.net">Pattern Visualizer</a>, and that logic will eventually make its way into this app as well.</p>
+<p>Second, we are cheating a bit with how we calculate what we can glide to. For the purposes of making the app more performant, we are including a landing area only if we can glide to the centroid of that area. For landing areas, this is conservative, and fine. But with Runways which are long and skinny, we really only care if we can hit the threshold (since we know for sure that runways are usually pretty good places to land). </p>
+<p>It's also useful for answering a question I like to ask before I do a night cross-country: What is the minimum altitude at which you can fly a given route and always (or at least mostly) be in range of a runway?</p>
+<p>In the case of a flight between KGTU and KHYI, 6,500 feet leaves you at risk for only two short segments<sup class="footnote-reference"><a href="#5">6</a></sup>.</p>
+<img src="../../images/field_finder/kgtu_khyi.png" alt="UI showing a flight between KGTU and KHYI." />
+<h1 id="problems-and-future-improvements">Problems and Future Improvements</h1>
+<p>This is obviously imperfect, and by no means done. Some areas we consider landable right now are terrible options. For instance, just looking around Austin:</p>
+<p>We have a forest, which is misclassified as a field:</p>
+<img src="../../images/field_finder/forested_field.png" alt="What is clearly a forest is misclassified as a field" />
+<p>A lot of perfectly good fields are bisected by a line of trees:</p>
+<img src="../../images/field_finder/tree_bisected.png" alt="Two fields seperated by a line of trees" />
+<p>In this case, either of the fields would probably make an acceptable forced landing site. But it would be nice if we could post-analyze each tile and see if the landable segment crosses any interesting objects. I'm curious if I could use something like tensorflow to process the satellite imagery for each segment and see if the imagery shows obstructions that don't show up in the NLCD dataset.</p>
+<p>And here, we have a very long perfectly runway shaped field, but unfortunately this field is cleared because its occupied by high voltage power lines.</p>
+<img src="../../images/field_finder/power_lines.png" alt="A field occupied by high voltage power lines." />
+<p>This is a partially solvable problem, as there are several datasets that can be combined to create linesegments for most high voltage power lines in the contiguous US. We could do something similar to (or combined with) our slope mask earlier. Take these vectors, convert them to a true/false raster (adding some buffer depending on the height of the towers), and then use that as an additional mask (or merge it with the existing one). It won't get all power lines, but it should get most of the big ones.</p>
+<p>Additionally, the one huge thing that is missing here is winds. A lot of the existing code was designed with winds in mind, but I'm honestly not sure how I want to implement that from a UI perspective yet.</p>
+<h1 id="closing">Closing</h1>
+<p>This tool won't tell you whether a field is safe to land in. Only your eyes and judgment can do that. For me, the results aren't a go/no-go decision. They're just an easy way to load this aspect of the flight into my head during preflight. The tool highlights where options thin out, what altitudes might be worth considering, and which parts of the route deserve extra attention. And it can answer questions that would be tedious to answer manually, like what altitude you need to maintain to stay within gliding range of a runway.</p>
+<p>The datasets here are massive (the SRTM and NLCD data cover the entire continental US at high resolution), which made the pipeline work particularly satisfying. There's something deeply appealing about turning gigabytes of elevation and land cover data into what I hope will be actionable flight planning information.</p>
+<p>This is very much a work in progress. The power line masking needs implementation, the classification accuracy could improve with some ML-based satellite imagery analysis, etc. And I haven't even looked into the practicality of using LIDAR data in urban areas (it turns out, there are a lot of public lidar datasets). I'll likely revisit this project as I refine the algorithms and expand coverage.</p>
+<p>I'd like to eventually host this somewhere publicly accessible, but I haven't worked out how to do that without it becoming a money pit. The infrastructure itself is straightforward—PostGIS database, API server, caching layer—but serving vector tiles for the entire continental US to an unknown number of users means either paying for capacity I don't need most days, or getting surprised by a bill when someone posts it on Reddit. For now, I'm focused on getting the data pipeline and algorithms right. Deployment can wait until I figure out sustainable hosting.</p>
+<br>
+<br>
+<br>
+<br>
+<div class="footnote-definition" id="1"><sup class="footnote-definition-label">1</sup>
+<p>https://aviationsafetymagazine.com/features/water-or-trees/</p>
+</div>
+<div class="footnote-definition" id="6"><sup class="footnote-definition-label">2</sup>
+<p>https://www.ecfr.gov/current/title-14/chapter-I/subchapter-C/part-23/subpart-C/subject-group-ECFR72b1233739a7fce/section-23.2270</p>
+</div>
+<div class="footnote-definition" id="2"><sup class="footnote-definition-label">3</sup>
+<p>You will also notice that there is a max size for contiguous chunks of land of about 2x2km. These smaller chunks of land are just easier to work with, and the subdivision is more or less a thin wrapper around the PostGIS ST_SUBDIVIDE function, so I'm glossing over it.</p>
+</div>
+<div class="footnote-definition" id="3"><sup class="footnote-definition-label">4</sup>
+<p>Calling these landable_areas to the user is not a good idea, but &quot;suspected landable area&quot; doesn't quite roll off the tongue. I'm not sure what to call them, but that is a problem for future Grayson</p>
+</div>
+<div class="footnote-definition" id="4"><sup class="footnote-definition-label">5</sup>
+<p>Obviously the satellite imagery could be out of date, but the only way you are gonna fix that is to go fly over it yourself, at which point you've already accepted the risk anyways.</p>
+</div>
+<div class="footnote-definition" id="5"><sup class="footnote-definition-label">6</sup>
+<p>One of the fields providing this coverage is private and probably not lit, but that could be filtered out with a better airport datasource. And also, as yet another reminder, this doesn't take winds into account at all yet.</p>
+</div>
+
+        </section>
+
+        
+            <div class="post-tags">
+                <nav class="nav tags">
+                    <ul class="tags">
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/rust/>Rust</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/typescript/>Typescript</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/webapp/>Webapp</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/aviation/>Aviation</a></li>
+                        
+                    </ul>
+                </nav>
+            </div>
+        
+
+    </article>
+</main>
+
+
+
+        <footer>
+	<div style="display:flex">
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;github.com&#x2F;graysonhead title=GitHub>
+	         <i data-feather=github></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;hachyderm.io&#x2F;@Darkside title=Mastadon>
+	         <i data-feather=globe></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;www.linkedin.com&#x2F;in&#x2F;graysonhead&#x2F; title=LinkedIn>
+	         <i data-feather=linkedin></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;pixel.tchncs.de&#x2F;i&#x2F;web title=PixelFed>
+	         <i data-feather=camera></i>
+	     </a>
+	 
+	 </div>
+	 <div class="footer-info">
+	 2026 © Grayson Head
+        </div>
+</footer>
+
+
+<script>
+	    feather.replace();
+</script>
+
+
+    </div>
+</body>
+
+</html>

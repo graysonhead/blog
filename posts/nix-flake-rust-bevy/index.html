@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+
+    
+    <title>
+         Nix Powered Dev Environments: Rust + Bevy
+        
+    </title>
+
+    
+    <meta property="og:title"
+        content="Nix Powered Dev Environments: Rust + Bevy" />
+    
+    
+
+    
+    
+    
+
+    
+    
+    
+
+    
+
+    
+
+    
+
+    
+    
+    <script src=https://blog.graysonhead.net/js/feather.min.js></script>
+    
+
+
+    
+    <link href=https://blog.graysonhead.net/css/fonts.css rel="stylesheet" />
+    
+
+    <link rel="stylesheet" type="text/css" media="screen" href=https://blog.graysonhead.net/css/main.css />
+
+    
+    <link rel="stylesheet" id="darkModeStyle" type="text/css" href=https://blog.graysonhead.net/css/dark.css   />
+    
+
+
+    
+
+
+</head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-CCTJX63WS9"></script>
+<script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    gtag('js', new Date());
+
+    gtag('config', 'G-CCTJX63WS9');
+</script>
+
+<body>
+    <div class="content">
+        <header>
+    <div class="main" id="main_title">
+        <a href=https:&#x2F;&#x2F;blog.graysonhead.net></a>
+    </div>
+
+    <nav>
+        
+            <a href=&#x2F;posts>&#x2F;posts</a>
+        
+            <a href=&#x2F;projects>&#x2F;projects</a>
+        
+            <a href=&#x2F;about>&#x2F;about</a>
+        
+
+        
+            |
+
+            
+                <a href=&#x2F;>en</a>
+            
+        
+
+        
+    </nav>
+</header>
+
+
+        
+    
+<main>
+    <article>
+        <div class="title">
+            <h1 class="title">Nix Powered Dev Environments: Rust + Bevy</h1>
+            <div class="meta">
+                
+                on  2023-06-20
+
+                
+            </div>
+        </div>
+
+        
+
+        <section class="body">
+            <p>As with many things Nix, the result was simple and reliably repeatable, but getting there took a lot of throwing stuff at the wall. Currently my small allotment of game development time is focused on Rust, and more specifically Bevy; so if you aren't interested in that combination this post may not be much help to you.</p>
+<p>If you want to just take my word for it and download a template, I'll save you some time:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>nix flake new --template github:graysonhead/nix-templates#rust-bevy ./new_directory_here
+</span></code></pre>
+<p>This should get you a mostly out of the box &quot;hello world&quot; 3d scene running on bevy 0.10. At least, it should work out of the box on NixOS. For non NixOS, keep reading.</p>
+<p>For posterity, here are the two most important parts:</p>
+<p><code>flake.nix</code></p>
+<pre data-lang="nix" style="background-color:#2b303b;color:#c0c5ce;" class="language-nix "><code class="language-nix" data-lang="nix"><span>{
+</span><span>  </span><span style="color:#d08770;">inputs </span><span>= {
+</span><span>    </span><span style="color:#d08770;">flake-utils</span><span>.</span><span style="color:#d08770;">url </span><span>= &quot;</span><span style="color:#a3be8c;">github:numtide/flake-utils</span><span>&quot;;
+</span><span>    </span><span style="color:#d08770;">naersk</span><span>.</span><span style="color:#d08770;">url </span><span>= &quot;</span><span style="color:#a3be8c;">github:nix-community/naersk</span><span>&quot;;
+</span><span>    </span><span style="color:#d08770;">rust-overlay</span><span>.</span><span style="color:#d08770;">url </span><span>= &quot;</span><span style="color:#a3be8c;">github:oxalica/rust-overlay</span><span>&quot;;
+</span><span>    </span><span style="color:#d08770;">nixpkgs</span><span>.</span><span style="color:#d08770;">url </span><span>= &quot;</span><span style="color:#a3be8c;">github:NixOS/nixpkgs/nixpkgs-unstable</span><span>&quot;;
+</span><span>  };
+</span><span>
+</span><span>  </span><span style="color:#d08770;">outputs </span><span>= </span><span style="color:#8fa1b3;">{ </span><span>self, flake-utils, naersk, nixpkgs, rust-overlay </span><span style="color:#8fa1b3;">}</span><span>:
+</span><span>    </span><span style="color:#bf616a;">flake-utils</span><span>.</span><span style="color:#bf616a;">lib</span><span>.</span><span style="color:#bf616a;">eachDefaultSystem </span><span>(system:
+</span><span>      </span><span style="color:#b48ead;">let
+</span><span>        </span><span style="color:#d08770;">overlays </span><span>= [ (</span><span style="color:#96b5b4;">import </span><span style="color:#bf616a;">rust-overlay</span><span>) ];
+</span><span>        </span><span style="color:#d08770;">pkgs </span><span>= (</span><span style="color:#96b5b4;">import </span><span style="color:#bf616a;">nixpkgs</span><span>) {
+</span><span>          </span><span style="color:#b48ead;">inherit </span><span style="color:#d08770;">system overlays</span><span>;
+</span><span>        };
+</span><span>        </span><span style="color:#d08770;">naersk&#39; </span><span>= </span><span style="color:#bf616a;">pkgs</span><span>.</span><span style="color:#bf616a;">callPackage naersk </span><span>{ };
+</span><span>        </span><span style="color:#d08770;">buildInputs </span><span>= </span><span style="color:#b48ead;">with </span><span style="color:#bf616a;">pkgs</span><span>; [
+</span><span>          </span><span style="color:#bf616a;">vulkan-loader
+</span><span>          </span><span style="color:#bf616a;">xorg</span><span>.</span><span style="color:#bf616a;">libXcursor
+</span><span>          </span><span style="color:#bf616a;">xorg</span><span>.</span><span style="color:#bf616a;">libXi
+</span><span>          </span><span style="color:#bf616a;">xorg</span><span>.</span><span style="color:#bf616a;">libXrandr
+</span><span>          </span><span style="color:#bf616a;">alsa-lib
+</span><span>          </span><span style="color:#bf616a;">udev
+</span><span>          </span><span style="color:#bf616a;">pkg-config
+</span><span>        ];
+</span><span>        </span><span style="color:#d08770;">nativeBuildInputs </span><span>= </span><span style="color:#b48ead;">with </span><span style="color:#bf616a;">pkgs</span><span>; [
+</span><span>          </span><span style="color:#bf616a;">libxkbcommon
+</span><span>          (</span><span style="color:#bf616a;">rust-bin</span><span>.</span><span style="color:#bf616a;">selectLatestNightlyWith
+</span><span>            (toolchain: </span><span style="color:#bf616a;">toolchain</span><span>.</span><span style="color:#bf616a;">default</span><span>.</span><span style="color:#bf616a;">override </span><span>{
+</span><span>              </span><span style="color:#d08770;">extensions </span><span>= [ &quot;</span><span style="color:#a3be8c;">rust-src</span><span>&quot; &quot;</span><span style="color:#a3be8c;">clippy</span><span>&quot; ];
+</span><span>            }))
+</span><span>        ];
+</span><span>        </span><span style="color:#d08770;">all_deps </span><span>= </span><span style="color:#b48ead;">with </span><span style="color:#bf616a;">pkgs</span><span>; [
+</span><span>          </span><span style="color:#bf616a;">cargo-flamegraph
+</span><span>          </span><span style="color:#bf616a;">cargo-expand
+</span><span>          </span><span style="color:#bf616a;">nixpkgs-fmt
+</span><span>          </span><span style="color:#bf616a;">cmake
+</span><span>        ] ++ </span><span style="color:#bf616a;">buildInputs </span><span>++ </span><span style="color:#bf616a;">nativeBuildInputs</span><span>;
+</span><span>      </span><span style="color:#b48ead;">in
+</span><span>      </span><span style="color:#b48ead;">rec </span><span>{
+</span><span>        </span><span style="color:#65737e;"># For `nix build` &amp; `nix run`:
+</span><span>        </span><span style="color:#d08770;">defaultPackage </span><span>= </span><span style="color:#bf616a;">packages</span><span>.</span><span style="color:#bf616a;">bevy_template</span><span>;
+</span><span>        </span><span style="color:#d08770;">packages </span><span>= </span><span style="color:#b48ead;">rec </span><span>{
+</span><span>          </span><span style="color:#d08770;">bevy_template </span><span>= </span><span style="color:#bf616a;">naersk&#39;</span><span>.</span><span style="color:#bf616a;">buildPackage </span><span>{
+</span><span>            </span><span style="color:#d08770;">src </span><span>= </span><span style="color:#a3be8c;">./.</span><span>;
+</span><span>            </span><span style="color:#d08770;">nativeBuildInputs </span><span>= </span><span style="color:#bf616a;">nativeBuildInputs</span><span>;
+</span><span>            </span><span style="color:#d08770;">buildInputs </span><span>= </span><span style="color:#bf616a;">buildInputs</span><span>;
+</span><span>            </span><span style="color:#d08770;">postInstall </span><span>= &#39;&#39;
+</span><span style="color:#a3be8c;">              cp -r assets $out/bin/
+</span><span style="color:#a3be8c;">            </span><span>&#39;&#39;;
+</span><span>            </span><span style="color:#65737e;"># Disables dynamic linking when building with Nix
+</span><span>            </span><span style="color:#d08770;">cargoBuildOptions </span><span>= x: </span><span style="color:#bf616a;">x </span><span>++ [ &quot;</span><span style="color:#a3be8c;">--no-default-features</span><span>&quot; ];
+</span><span>          };
+</span><span>        };
+</span><span>
+</span><span>        </span><span style="color:#65737e;"># For `nix develop`:
+</span><span>        </span><span style="color:#d08770;">devShell </span><span>= </span><span style="color:#bf616a;">pkgs</span><span>.</span><span style="color:#bf616a;">mkShell </span><span>{
+</span><span>          </span><span style="color:#d08770;">nativeBuildInputs </span><span>= </span><span style="color:#bf616a;">all_deps</span><span>;
+</span><span>          </span><span style="color:#d08770;">shellHook </span><span>= &#39;&#39;
+</span><span style="color:#a3be8c;">            export CARGO_MANIFEST_DIR=$(pwd)
+</span><span style="color:#a3be8c;">            export LD_LIBRARY_PATH=&quot;$LD_LIBRARY_PATH:</span><span style="font-style:italic;color:#ab7967;">${</span><span style="font-style:italic;color:#bf616a;">pkgs</span><span style="font-style:italic;color:#c0c5ce;">.</span><span style="font-style:italic;color:#bf616a;">lib</span><span style="font-style:italic;color:#c0c5ce;">.</span><span style="font-style:italic;color:#bf616a;">makeLibraryPath all_deps</span><span style="font-style:italic;color:#ab7967;">}</span><span style="color:#a3be8c;">&quot;
+</span><span style="color:#a3be8c;">          </span><span>&#39;&#39;;
+</span><span>        };
+</span><span>      }
+</span><span>    );
+</span><span>}
+</span><span>
+</span></code></pre>
+<p><code>cargo.toml</code></p>
+<pre data-lang="toml" style="background-color:#2b303b;color:#c0c5ce;" class="language-toml "><code class="language-toml" data-lang="toml"><span>[package]
+</span><span style="color:#bf616a;">name </span><span>= &quot;</span><span style="color:#a3be8c;">bevy_template</span><span>&quot;
+</span><span style="color:#bf616a;">version </span><span>= &quot;</span><span style="color:#a3be8c;">0.1.0</span><span>&quot;
+</span><span style="color:#bf616a;">edition </span><span>= &quot;</span><span style="color:#a3be8c;">2021</span><span>&quot;
+</span><span>
+</span><span style="color:#65737e;"># See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+</span><span>
+</span><span>[dependencies]
+</span><span style="color:#bf616a;">bevy </span><span>= { </span><span style="color:#bf616a;">package </span><span>= &quot;</span><span style="color:#a3be8c;">bevy</span><span>&quot;, </span><span style="color:#bf616a;">version </span><span>= &quot;</span><span style="color:#a3be8c;">0.13.2</span><span>&quot; }
+</span><span>
+</span><span>[profile.dev]
+</span><span style="color:#bf616a;">opt-level </span><span>= </span><span style="color:#d08770;">1
+</span><span>
+</span><span>[profile.dev.package.&quot;</span><span style="color:#a3be8c;">*</span><span>&quot;]
+</span><span style="color:#bf616a;">opt-level </span><span>= </span><span style="color:#d08770;">3
+</span><span>
+</span><span>[features]
+</span><span style="color:#bf616a;">default </span><span>= [&quot;</span><span style="color:#a3be8c;">bevy/dynamic_linking</span><span>&quot;]
+</span><span>
+</span></code></pre>
+<p>Going first over the <code>cargo.toml</code>, you will note that I'm following the advice of the <a href="https://bevy-cheatbook.github.io/pitfalls/performance.html">Unofficial Bevy Cheat Book</a>. </p>
+<pre data-lang="toml" style="background-color:#2b303b;color:#c0c5ce;" class="language-toml "><code class="language-toml" data-lang="toml"><span>[profile.dev]
+</span><span style="color:#bf616a;">opt-level </span><span>= </span><span style="color:#d08770;">1
+</span><span>
+</span><span>[profile.dev.package.&quot;</span><span style="color:#a3be8c;">*</span><span>&quot;]
+</span><span style="color:#bf616a;">opt-level </span><span>= </span><span style="color:#d08770;">3
+</span></code></pre>
+<p>By setting the profile.dev to opt-level 1 and dev.package.&quot;*&quot; to opt-level 3, you get a great compromise of compile times (as the code you are changing is at an optimization level of 1), but all the dependencies you are using (such as bevy itself) is at optimization level 3. In some cases, you may still run into performance issues, in which case you should increase the profile.dev opt level, or alternatively just compile in release mode.</p>
+<p>Speaking of which, <code>nix build</code> will always compile in release mode.</p>
+<p>Now, if you really want to get the compile times down, you will enable the <code>dynamic_linking</code> (formerly known as <code>dynamic</code> in pre 0.10 releases of Bevy). However, this prevents <code>nix build</code> or <code>nix run</code> from working, because dynamic linking in Nix is...odd. At least in regards to Rust.</p>
+<p>So, to combat this, I made this rather counter-intuitive addition to the Cargo manifest:</p>
+<pre data-lang="toml" style="background-color:#2b303b;color:#c0c5ce;" class="language-toml "><code class="language-toml" data-lang="toml"><span>[dependencies]
+</span><span style="color:#bf616a;">bevy </span><span>= { </span><span style="color:#bf616a;">package </span><span>= &quot;</span><span style="color:#a3be8c;">bevy</span><span>&quot;, </span><span style="color:#bf616a;">version </span><span>= &quot;</span><span style="color:#a3be8c;">0.10.1</span><span>&quot;}
+</span><span>
+</span><span>[features]
+</span><span style="color:#bf616a;">default </span><span>= [&quot;</span><span style="color:#a3be8c;">bevy/dynamic_linking</span><span>&quot;]
+</span></code></pre>
+<p>So, by default if you run <code>cargo build</code> or <code>cargo run</code>, you will get very fast compile times thanks to dynamic linking, however once you build the derivation in release mode using nix, it won't use dynamic linking (and will actually work as a result.)</p>
+<p>The <code>cargoBuildOptions</code> line in the flake governs that behavior:</p>
+<pre data-lang="nix" style="background-color:#2b303b;color:#c0c5ce;" class="language-nix "><code class="language-nix" data-lang="nix"><span style="color:#bf616a;">packages </span><span style="background-color:#bf616a;color:#2b303b;">=</span><span> </span><span style="color:#b48ead;">rec </span><span>{
+</span><span>    </span><span style="color:#d08770;">bevy_template </span><span>= </span><span style="color:#bf616a;">naersk&#39;</span><span>.</span><span style="color:#bf616a;">buildPackage </span><span>{
+</span><span>    </span><span style="color:#d08770;">src </span><span>= </span><span style="color:#a3be8c;">./.</span><span>;
+</span><span>    </span><span style="color:#d08770;">nativeBuildInputs </span><span>= </span><span style="color:#bf616a;">nativeBuildInputs</span><span>;
+</span><span>    </span><span style="color:#d08770;">buildInputs </span><span>= </span><span style="color:#bf616a;">buildInputs</span><span>;
+</span><span>    </span><span style="color:#d08770;">postInstall </span><span>= &#39;&#39;
+</span><span style="color:#a3be8c;">        cp -r assets $out/bin/
+</span><span style="color:#a3be8c;">    </span><span>&#39;&#39;;
+</span><span>    </span><span style="color:#65737e;"># Disables dynamic linking when building with Nix
+</span><span>    </span><span style="color:#d08770;">cargoBuildOptions </span><span>= x: </span><span style="color:#bf616a;">x </span><span>++ [ &quot;</span><span style="color:#a3be8c;">--no-default-features</span><span>&quot; ];
+</span><span>    };
+</span><span>}</span><span style="background-color:#bf616a;color:#2b303b;">;</span><span>
+</span></code></pre>
+<p>In addition, the <code>postInstall</code> line ensures that any game assets are copied to the correct directory. </p>
+<p>So, you get the best of both worlds more or less. Consistent development environments using Flakes, fast compile times using cargo, and statically linked outputs using nix.</p>
+<h1 id="non-nixos-systems">Non NixOS Systems</h1>
+<p>If you want to run this example using Nix on a non-NixOS system, you will need an extra step. Since your graphics drivers are most likely not available in the Nix store, you will need to employ a wrapper to make them available. </p>
+<p>The best one I've found is <a href="https://github.com/guibou/nixGL">NixGL</a>. </p>
+<p>Use it like this:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>nix run --impure github:guibou/nixGL -- nix run
+</span></code></pre>
+<p>Or, if your Nix install doesn't have Non-free packages enabled by default:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>export NIXPKGS_ALLOW_UNFREE=1 &amp;&amp; nix run --impure github:guibou/nixGL -- nix run
+</span></code></pre>
+
+        </section>
+
+        
+            <div class="post-tags">
+                <nav class="nav tags">
+                    <ul class="tags">
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/tutorials/>Tutorials</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/nix/>Nix</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/nixos/>NixOS</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/rust/>Rust</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/rust-overlay/>rust-overlay</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/naersk/>naersk</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/bevy/>bevy</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/gamedev/>gamedev</a></li>
+                        
+                    </ul>
+                </nav>
+            </div>
+        
+
+    </article>
+</main>
+
+
+
+        <footer>
+	<div style="display:flex">
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;github.com&#x2F;graysonhead title=GitHub>
+	         <i data-feather=github></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;hachyderm.io&#x2F;@Darkside title=Mastadon>
+	         <i data-feather=globe></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;www.linkedin.com&#x2F;in&#x2F;graysonhead&#x2F; title=LinkedIn>
+	         <i data-feather=linkedin></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;pixel.tchncs.de&#x2F;i&#x2F;web title=PixelFed>
+	         <i data-feather=camera></i>
+	     </a>
+	 
+	 </div>
+	 <div class="footer-info">
+	 2026 © Grayson Head
+        </div>
+</footer>
+
+
+<script>
+	    feather.replace();
+</script>
+
+
+    </div>
+</body>
+
+</html>
