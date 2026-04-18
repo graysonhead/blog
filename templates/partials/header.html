@@ -95,6 +95,9 @@
 
     {# TODO: custom css and js. #}
 
+    {% if config.generate_feed %}
+    <link rel="alternate" type="application/atom+xml" title="{{ config.title }} - Feed" href="{{ get_url(path="atom.xml") }}" />
+    {% endif %}
 
 </head>
 <!-- Google tag (gtag.js) -->
