@@ -1,6 +1,6 @@
 +++
 title = "How to Know Your Distributed System is Correct (Before It Exists)"
-date = 2026-04-26
+date = 2026-05-02
 [taxonomies]
 	tags = [ "TLA", "Software Engineering", "distributed systems" ]
 +++
