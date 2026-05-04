@@ -148,7 +148,7 @@ Spec == Init /\ [][Next]_vars
 
 This is the top-level definition that ties everything together. It says: the system starts in `Init` AND, in every subsequent step, either a `Next` action occurs or the variables stay the same. That last part, `[][Next]_vars`, is where the temporal logic comes in. The `[]` means "always" (as in, at every point in time), and the `_vars` subscript allows for "stuttering steps" where nothing changes. Stuttering steps are a deliberate design choice to allow specs to be composed together cleanly, but you can mostly think of it as: at every moment, the system either takes a valid step or idles.
 
-When TLC runs, this is what it checks against. It takes your `Spec`, generates the full graph of reachable states, and then verifies that your invariants hold in every single one of them.
+When TLC runs, this is what it checks against. It takes your Spec, generates the full graph of reachable states, and then verifies that your invariants hold in every single one of them.
 
 We can evaluate this spec like so:
 
