@@ -1,0 +1,280 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <title> - netcode</title>
+    <link href="https://blog.graysonhead.net/tags/netcode/atom.xml" rel="self" type="application/atom+xml"/>
+    <link href="https://blog.graysonhead.net"/>
+    <generator uri="https://www.getzola.org/">Zola</generator>
+    <updated>2026-03-26T00:00:00+00:00</updated>
+    <id>https://blog.graysonhead.net/tags/netcode/atom.xml</id>
+    <entry xml:lang="en">
+        <title>Reliable Delivery Over Horrible Networks</title>
+        <published>2026-03-26T00:00:00+00:00</published>
+        <updated>2026-03-26T00:00:00+00:00</updated>
+        <author>
+          <name>Unknown</name>
+        </author>
+        <link rel="alternate" href="https://blog.graysonhead.net/posts/reliable-delivery/" type="text/html"/>
+        <id>https://blog.graysonhead.net/posts/reliable-delivery/</id>
+        
+        <content type="html">&lt;p&gt;TCP is a cornerstone of the internet for good reason: it works very well in most situations. One of the reasons it is so effective is because of how it handles dealing with congestion. Congestion control algorithms are like a bouncer at a packed venue. When things are backed up inside, nobody new gets in. When there&#x27;s room, the line starts moving again.&lt;&#x2F;p&gt;
+&lt;p&gt;And as far as TCP is concerned, the best signal for congestion is lost segments &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#1&quot;&gt;1&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt; (segments being the individual unit of data that gets wrapped in an ethernet frame &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#2&quot;&gt;2&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;). But loss isn&#x27;t always congestion. Sometimes loss is switching cell towers. Sometimes loss is because you are right on the edge of the effective range of a radio link. Sometimes loss is adversarial interference.&lt;&#x2F;p&gt;
+&lt;p&gt;At a certain percentage of loss, you won&#x27;t be able to deliver any data via TCP at all.&lt;&#x2F;p&gt;
+&lt;p&gt;So let&#x27;s say you are building a network stack for unmanned vehicles that might operate in environments with adversarial jamming. How can you be sure you can deliver a critical message to them in the case of an emergency?&lt;&#x2F;p&gt;
+&lt;p&gt;As we will soon discover, it depends.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;latency-sucks&quot;&gt;Latency Sucks&lt;&#x2F;h2&gt;
+&lt;p&gt;The two prime guarantees of TCP are:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Reliable Delivery (your byte stream will make it to the other side)&lt;&#x2F;li&gt;
+&lt;li&gt;Ordered (your byte stream will arrive in the same order you sent it)&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;And solving these two guarantees efficiently drives much of the design of TCP. And the key to understanding this (and often, to troubleshooting TCP issues) are the &amp;quot;windows&amp;quot; that regulate the flow of data between nodes.&lt;&#x2F;p&gt;
+&lt;p&gt;The reason this matters for us: those windows are a feedback system, and feedback systems are sensitive to latency. On a lossy, high-latency link, that sensitivity becomes TCP&#x27;s biggest weakness.&lt;&#x2F;p&gt;
+&lt;p&gt;In an ideal world, the sender would send data as fast as it possibly can, the network would dutifully transport all this data at exactly the rate the sender is sending it, and then the receiver will receive and process the data exactly as fast as the sender sends it. However, in practice, this almost never happens. What if the receiver is an overloaded webserver that is processing data from a million other clients? What if the network is congested? At some point, the sender must slow down. Windows regulate the amount of data that is allowed to be in-flight between clients at any time. They represent the gas pedal that is pressed when all is well and the data is flowing as fast as possible, as well as the brake that gets pushed if the receiver stalls, or the network quality degrades.&lt;&#x2F;p&gt;
+&lt;p&gt;The first window is the Send window. This is maintained by the sender. The purpose of this window is to hold the Bandwidth Delay Product (BDP) of the connection. You can figure out what the BDP is with some simple math. Simply multiply the rate of transmission in bytes by the latency in seconds: &lt;&#x2F;p&gt;
+&lt;p&gt;&lt;code&gt;( BDP = bandwidth * rtt)&lt;&#x2F;code&gt;. &lt;&#x2F;p&gt;
+&lt;p&gt;For example, if your application can saturate a 10Gbps NIC and you are sending data to a host 10ms from you, your BDP is &lt;code&gt;10 Gigabits&#x2F;s * .01&lt;&#x2F;code&gt;. Which works out to around 12.5 Megabytes. In theory, if all you were doing was sending data from one machine to one client, you could set your send buffer &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#3&quot;&gt;3&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt; to this exact value and never need to adjust it. But in practice, this window (as well as all the others) are subject to algorithms that constantly increase and decrease their size to accommodate changing conditions.&lt;&#x2F;p&gt;
+&lt;p&gt;So when we send data, data gets put into this buffer. But why don&#x27;t we forget it? Why does it still stick around after sending? That is because we need to know the other side received it before it can be discarded. We need delivery to be reliable. Once the other side sends us an ACK for that specific segment, then we can drop that specific data from the send buffer and free up room to send more data, but until this happens, the sending side must retain it for possible retransmission. So in addition to being a throttling mechanism, the send buffer can also be a cache for retransmission. To put it simply, the buffer derived from the send window is what allows us to guarantee that the data is both reliably delivered, and ordered.&lt;&#x2F;p&gt;
+&lt;p&gt;Next, we have the Receive window. This window regulates how quickly the host on the receiving side of the connection is actually consuming data. Each ack sent by a receiver will contain a &lt;code&gt;rwnd&lt;&#x2F;code&gt; value that indicates how much room is left in the window, and the Sender should not send additional data to the Receiver if it exceeds this value (even if the Sender&#x27;s send buffer is not full). This allows the receiving host to add backpressure to the system to slow down the propagation of data through a network if it cannot keep up with the rate at which data is being sent.&lt;&#x2F;p&gt;
+&lt;p&gt;As an aside, this value is extremely valuable when troubleshooting issues with live applications, you can see it here in wireshark:
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery&#x2F;tcp_window.png&quot; alt=&quot;Where to find the rwnd in wireshark&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;And finally, we have the congestion window. The congestion window&#x27;s job is to provide backpressure when the network itself starts introducing problems. In practice, it does the same job as the receive window, but for different reasons. It is adjusted by the operating system based on the measured quality of the connection.&lt;&#x2F;p&gt;
+&lt;p&gt;These three windows decide how much data you can send over a TCP connection at any given moment. For instance, if:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;cwnd&lt;&#x2F;code&gt; = 64KiB&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;rwnd&lt;&#x2F;code&gt; = 48KiB&lt;&#x2F;li&gt;
+&lt;li&gt;bytes in flight = 30KiB&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;Then you can send &lt;code&gt;min(64, 48) - 30 = 18KiB&lt;&#x2F;code&gt; right now.&lt;&#x2F;p&gt;
+&lt;p&gt;So, now that we understand some of the basics, why does latency make this worse?&lt;&#x2F;p&gt;
+&lt;p&gt;Remember that on most systems, these window sizes are auto-tuned by the system. In fact, the backpressure and congestion control systems of TCP depend on their size being dynamic. The SEND -&amp;gt; ACK process allows each side of the conversation to discover things about the state of the sender, receiver, and connection between them. But, the quickest they can possibly discover this information is one round trip time &lt;em&gt;after&lt;&#x2F;em&gt; those changes occur. It&#x27;s a feedback system. And the higher the RTT, the slower the feedback, for both positive (link is underutilized) and negative (high packet loss conditions exist) conditions.&lt;&#x2F;p&gt;
+&lt;p&gt;Most algorithms governing this process of optimizing the congestion window additively increase, and multiplicative decrease the cwnd. This means that recovering from a previous loss event is especially punishing, because it takes longer to get back up to the maximum value than it does to go from max -&amp;gt; 0. This exacerbates how long it takes to recover from lossy conditions on high latency links. &lt;em&gt;Especially&lt;&#x2F;em&gt; once you are past the slow start threshold (depicted on this chart as a yellow line) &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#4&quot;&gt;4&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;&lt;&#x2F;p&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery&#x2F;ssh_latency_cwnd.png&quot; alt=&quot;Graph showing rate of cwnd increase for different link types&quot; &#x2F;&gt;
+&lt;p&gt;Which is all to say, a lossy link is bad for TCP. A high latency lossy link is absolutely terrible.&lt;&#x2F;p&gt;
+&lt;p&gt;For instance, let&#x27;s look at a 1 second 100% loss event on a 20ms network:&lt;&#x2F;p&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery&#x2F;tcp_outage.png&quot; alt=&quot;Graph showing recovery after an outage&quot; &#x2F;&gt;
+&lt;p&gt;1 second of loss is plenty long enough for the congestion window to clamp down to 0, delivery is completely halted. And then we spend a bit more than a second recovering to full bandwidth.&lt;&#x2F;p&gt;
+&lt;p&gt;Now let&#x27;s look at what this looks like when we go from 20ms to 200ms RTT:&lt;&#x2F;p&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery&#x2F;tcp_outage_geo_single.png&quot; alt=&quot;Graph showing the impact of a single outage on a high latency connection&quot; &#x2F;&gt;
+&lt;p&gt;We&#x27;ve recreated the same issue, the &lt;code&gt;cwnd&lt;&#x2F;code&gt; clamps to 0, but now recovery takes far longer: almost 3 seconds to get back to full throughput.&lt;&#x2F;p&gt;
+&lt;p&gt;Now, let&#x27;s imagine we have multiple loss events:&lt;&#x2F;p&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery&#x2F;tcp_outage_geo.png&quot; alt=&quot;Graph showing impact of multiple outages on a high latency connection&quot; &#x2F;&gt;
+&lt;p&gt;As you can see, small bursts of 100% loss can effectively cripple TCP with large latencies. We spend a lot of time with a perfectly good network barely sending any traffic because the congestion control feedback loop takes too long to ramp the connection back up between outages.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;when-tcp-gives-up-on-you&quot;&gt;When TCP Gives Up On You&lt;&#x2F;h2&gt;
+&lt;p&gt;If we plot the first 0-10% of loss of a connection with 20ms of latency, we wind up with a graph that has this general shape:  &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#8&quot;&gt;5&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery&#x2F;tcp_loss_throughput.png&quot; alt=&quot;Graph showing TCP Throughput versus packet loss. It is shaped like a backwards hockey stick&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;And the shape of this graph definitely shows the somewhat non-intuitive relationship between Throughput and Packet loss. The first 1% of loss immediately removed 80% of our throughput. Sit with that for a moment. A link that is 99% functional destroys four fifths of your bandwidth. And then it gets worse from there. At 2% loss we lose 90%. From that point on, our throughput is effectively zero. Until it gets to &lt;em&gt;actual&lt;&#x2F;em&gt; zero. And when that happens depends on, as you can probably guess, latency.&lt;&#x2F;p&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery&#x2F;tcp_breaking_point_combined.png&quot; alt=&quot;Graph showing when TCP connections at various latencies become nonfunctional&quot; &#x2F;&gt;
+&lt;p&gt;You might be wondering why the floor for every request at the bottom of a viable connection is .244 MB&#x2F;s. This is because TCP is hitting the minimum congestion window and gets throttled by the kernel&#x27;s minimum RTO. Once you hit this point, extra loss just causes more RTO-driven stalls, but since the throughput can&#x27;t get any lower, it just flatlines instead. &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#9&quot;&gt;6&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;when-you-give-up-on-tcp&quot;&gt;When You Give Up On TCP&lt;&#x2F;h2&gt;
+&lt;p&gt;If you absolutely must send data over a lossy, high latency link, you are going to need to abandon TCP and get creative.&lt;&#x2F;p&gt;
+&lt;p&gt;The main limitation of any reliable ordered delivery protocol such as TCP is that it must be polite to its neighbors. TCP must back off aggressively when congestion occurs. If it didn&#x27;t, a marginal link would immediately become a borderline useless one, because everyone would be a noisy neighbor. Additionally, to them, efficiency does matter a great deal. They won&#x27;t retransmit data until they know that they have to. Adding additional RTT to this process causes a great deal of pain, as we&#x27;ve previously explained.&lt;&#x2F;p&gt;
+&lt;p&gt;But if you absolutely need to guarantee delivery over a marginal link, what can you do? In most cases, you have to trade efficiency for reliability.&lt;&#x2F;p&gt;
+&lt;p&gt;Imagine the case where you need to get a control signal to a drone over a connection with 99% frame loss. It&#x27;s pretty obvious that in order to have any reasonable chance of delivering your message, you first need the data to be smaller than a single frame, and you must send at least 100 of them.&lt;&#x2F;p&gt;
+&lt;p&gt;And this is a valid way to handle this issue. If all you need to do is get one message through to the other end (Ideally a small one, like a &amp;quot;Return To Home&amp;quot; command), you can just saturate your entire bandwidth with one-way messages that don&#x27;t even need to get acked. They will get the message eventually as long as there is signal capture between the radios long enough to transmit a single frame. For cases where the link is degraded, but not entirely jammed, we can figure out the probability that a certain amount of duplication will result in a successful transmission:&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;Probability of Delivery&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Copies sent&lt;&#x2F;th&gt;&lt;th&gt;10% loss&lt;&#x2F;th&gt;&lt;th&gt;50% loss&lt;&#x2F;th&gt;&lt;th&gt;75% loss&lt;&#x2F;th&gt;&lt;th&gt;90% loss&lt;&#x2F;th&gt;&lt;th&gt;99% loss&lt;&#x2F;th&gt;&lt;&#x2F;tr&gt;&lt;&#x2F;thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;1&lt;&#x2F;td&gt;&lt;td&gt;90%&lt;&#x2F;td&gt;&lt;td&gt;50%&lt;&#x2F;td&gt;&lt;td&gt;25%&lt;&#x2F;td&gt;&lt;td&gt;10%&lt;&#x2F;td&gt;&lt;td&gt;1%&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;2&lt;&#x2F;td&gt;&lt;td&gt;99%&lt;&#x2F;td&gt;&lt;td&gt;75%&lt;&#x2F;td&gt;&lt;td&gt;44%&lt;&#x2F;td&gt;&lt;td&gt;19%&lt;&#x2F;td&gt;&lt;td&gt;2%&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;5&lt;&#x2F;td&gt;&lt;td&gt;&amp;gt;99.9%&lt;&#x2F;td&gt;&lt;td&gt;97%&lt;&#x2F;td&gt;&lt;td&gt;76%&lt;&#x2F;td&gt;&lt;td&gt;41%&lt;&#x2F;td&gt;&lt;td&gt;5%&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;10&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;&amp;gt;99.9%&lt;&#x2F;td&gt;&lt;td&gt;94%&lt;&#x2F;td&gt;&lt;td&gt;65%&lt;&#x2F;td&gt;&lt;td&gt;10%&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;25&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;&amp;gt;99.9%&lt;&#x2F;td&gt;&lt;td&gt;93%&lt;&#x2F;td&gt;&lt;td&gt;22%&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;50&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;~99.5%&lt;&#x2F;td&gt;&lt;td&gt;40%&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;100&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;63%&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;500&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;99.3%&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;&#x2F;tbody&gt;&lt;&#x2F;table&gt;
+&lt;p&gt;If you &lt;em&gt;can&lt;&#x2F;em&gt; measure the loss level of your link a simple protocol could just select an appropriate amount of copies from this table. Of course, you still wouldn&#x27;t have a guaranteed or ordered delivery system. You could also have the receiving side of the connection send ACKs, but now you&#x27;ve given up a significant portion of your bandwidth to guarantee delivery of a message that you could just as effectively ensure by just repeating it ad infinitum until the connection quality increases.&lt;&#x2F;p&gt;
+&lt;p&gt;But let&#x27;s say you need to transmit more than one emergency message? Let&#x27;s say you have hundreds of sensors generating hundreds of telemetry messages that need to reach the other side? Is there any way you can make this more tolerant to loss while also ensuring some form of reliable ordered delivery?&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;buffer-stuffing-the-shotgun-approach&quot;&gt;Buffer Stuffing: The Shotgun Approach&lt;&#x2F;h2&gt;
+&lt;p&gt;In order for this strategy to work, we do have some constraints:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Our Maximum Transmission Unit (MTU) is usefully large &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#6&quot;&gt;7&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;We can fit multiple messages within our MTU (The more, the better)&lt;&#x2F;li&gt;
+&lt;li&gt;The underlying link has some kind of Forward Error Correction (FEC) &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#5&quot;&gt;8&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt; that can correct for mid-frame bit-flips &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#7&quot;&gt;9&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;In this toy protocol, we have a &lt;code&gt;Message&lt;&#x2F;code&gt; type that can contain a collection of three different variants of &lt;code&gt;Commands&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;use &lt;&#x2F;span&gt;&lt;span&gt;parity_scale_codec::{Decode, Encode};
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub const &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;MAX_MESSAGE_SIZE&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;usize &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1500 &lt;&#x2F;span&gt;&lt;span&gt;- &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;48&lt;&#x2F;span&gt;&lt;span&gt;; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Roughly MTU minus worst case IPv6 UDP overhead.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub const &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;MAX_PAYLOAD_LEN&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;usize &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;128&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Per-command encoded size: 1 (variant) + 4 (seq) + 2 (compact len) + 128 (payload) = 135
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Message vec prefix: 2 bytes (compact, since capacity &amp;gt; 63)
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub const &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;RING_BUF_CAPACITY&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;usize &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;MAX_MESSAGE_SIZE&lt;&#x2F;span&gt;&lt;span&gt;; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Basically how much we can stuff in a single unsegmented datagram
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;#[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;derive&lt;&#x2F;span&gt;&lt;span&gt;(Debug, Clone, PartialEq, Encode, Decode)]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub enum &lt;&#x2F;span&gt;&lt;span&gt;Command {
+&lt;&#x2F;span&gt;&lt;span&gt;    Data { seq: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u32&lt;&#x2F;span&gt;&lt;span&gt;, payload: Vec&amp;lt;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u8&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt; },
+&lt;&#x2F;span&gt;&lt;span&gt;    Ack { seq: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u32 &lt;&#x2F;span&gt;&lt;span&gt;},
+&lt;&#x2F;span&gt;&lt;span&gt;    RetransmitRequest { seq: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u32 &lt;&#x2F;span&gt;&lt;span&gt;},
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;#[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;derive&lt;&#x2F;span&gt;&lt;span&gt;(Debug, Clone, PartialEq, Encode, Decode)]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub struct &lt;&#x2F;span&gt;&lt;span&gt;Message {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;commands&lt;&#x2F;span&gt;&lt;span&gt;: Vec&amp;lt;Command&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Every time the sender has a new command to send, it packages it into a &lt;code&gt;Message&lt;&#x2F;code&gt; together with the most recent W previously-sent (unacknowledged) commands from a ring buffer. The receiver treats each arriving message as a mini-recovery snapshot: any command it hasn&#x27;t seen yet gets buffered; any gap at the delivery frontier triggers an explicit retransmit request (NACK).&lt;&#x2F;p&gt;
+&lt;p&gt;Because recent commands appear in multiple consecutive outgoing messages, a transient loss rarely requires retransmission at all, since the lost packet&#x27;s data will simply arrive again inside the next message. In this way, the protocol is very inefficient when it comes to bandwidth, but what it buys us is the ability to skip the TCP-style feedback loop entirely, except in cases of extreme loss.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;theoretical-reliability&quot;&gt;Theoretical Reliability&lt;&#x2F;h3&gt;
+&lt;p&gt;With independent per-message loss probability &lt;strong&gt;p&lt;&#x2F;strong&gt;, a command that appears in &lt;strong&gt;W&lt;&#x2F;strong&gt; consecutive messages goes undelivered only if all W copies are dropped:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;P(undelivered passively) = p^W
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;For the worst case (128-byte payload, 1500 byte message, W = 10):&lt;&#x2F;p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Loss rate&lt;&#x2F;th&gt;&lt;th&gt;p¹⁰&lt;&#x2F;th&gt;&lt;th&gt;Failure rate&lt;&#x2F;th&gt;&lt;&#x2F;tr&gt;&lt;&#x2F;thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;1%&lt;&#x2F;td&gt;&lt;td&gt;10⁻²⁰&lt;&#x2F;td&gt;&lt;td&gt;Vanishingly small&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;5%&lt;&#x2F;td&gt;&lt;td&gt;9.8 × 10⁻¹⁴&lt;&#x2F;td&gt;&lt;td&gt;~1 per 10 trillion commands&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;10%&lt;&#x2F;td&gt;&lt;td&gt;10⁻¹⁰&lt;&#x2F;td&gt;&lt;td&gt;~1 per 10 billion&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;20%&lt;&#x2F;td&gt;&lt;td&gt;1.0 × 10⁻⁷&lt;&#x2F;td&gt;&lt;td&gt;~1 per 10 million&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;30%&lt;&#x2F;td&gt;&lt;td&gt;5.9 × 10⁻⁶&lt;&#x2F;td&gt;&lt;td&gt;~1 per 170,000&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;50%&lt;&#x2F;td&gt;&lt;td&gt;9.8 × 10⁻⁴&lt;&#x2F;td&gt;&lt;td&gt;~1 per 1,000&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;&#x2F;tbody&gt;&lt;&#x2F;table&gt;
+&lt;p&gt;At 30% loss, passive redundancy alone gives roughly 1 failure per 170,000 commands (in theory). The real-world numbers will look worse, and we&#x27;ll get to why shortly.&lt;&#x2F;p&gt;
+&lt;p&gt;Smaller payloads let you fit more copies per packet, pushing W higher. At 64-byte payloads, W doubles to 20:&lt;&#x2F;p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Loss rate p&lt;&#x2F;th&gt;&lt;th&gt;p²⁰&lt;&#x2F;th&gt;&lt;&#x2F;tr&gt;&lt;&#x2F;thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;10%&lt;&#x2F;td&gt;&lt;td&gt;10⁻²⁰&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;20%&lt;&#x2F;td&gt;&lt;td&gt;10⁻¹⁴&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;50%&lt;&#x2F;td&gt;&lt;td&gt;10⁻⁶&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;&#x2F;tbody&gt;&lt;&#x2F;table&gt;
+&lt;p&gt;These numbers assume uniform independent loss and, crucially, perfect ACK delivery — neither of which holds in practice. We&#x27;ll see exactly how that plays out in the benchmarks.&lt;&#x2F;p&gt;
+&lt;p&gt;The bandwidth cost scales directly with W, and W scales inversely with payload size. For a 1500-byte MTU, the numbers look like this:&lt;&#x2F;p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Payload&lt;&#x2F;th&gt;&lt;th&gt;W&lt;&#x2F;th&gt;&lt;th&gt;Overhead&lt;&#x2F;th&gt;&lt;&#x2F;tr&gt;&lt;&#x2F;thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;128 B&lt;&#x2F;td&gt;&lt;td&gt;10&lt;&#x2F;td&gt;&lt;td&gt;10× bandwidth for the ring window&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;64 B&lt;&#x2F;td&gt;&lt;td&gt;20&lt;&#x2F;td&gt;&lt;td&gt;20× bandwidth&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;32 B&lt;&#x2F;td&gt;&lt;td&gt;37&lt;&#x2F;td&gt;&lt;td&gt;37× bandwidth&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;16 B&lt;&#x2F;td&gt;&lt;td&gt;63&lt;&#x2F;td&gt;&lt;td&gt;63× bandwidth&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;&#x2F;tbody&gt;&lt;&#x2F;table&gt;
+&lt;p&gt;The smaller your payloads, the more copies fit per packet. This is great for reliability but punishing on bandwidth. At 16-byte payloads you get W=63, which is near-perfect reliability, but you&#x27;re sending 63× the raw data. Whether that&#x27;s acceptable depends entirely on how much bandwidth you have to spare.&lt;&#x2F;p&gt;
+&lt;p&gt;If bandwidth is constrained and loss rates are moderate, the RTO&#x2F;NACK path can be preferred by reducing W (use larger payloads) or by disabling passive redundancy entirely and relying solely on NACK-driven retransmission. Another option is dynamically adjusting this value from W=1 all the way up to your theoretical maximum based on perceived connection quality. But this adds a lot of complexity. And if you didn&#x27;t have the bandwidth to sustain high W on a clean link, a lossy one certainly isn&#x27;t going to give it to you.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;benchmarks&quot;&gt;Benchmarks&lt;&#x2F;h2&gt;
+&lt;p&gt;Piping our toy protocol through &lt;a href=&quot;https:&#x2F;&#x2F;crates.io&#x2F;crates&#x2F;badnet&quot;&gt;badnet&lt;&#x2F;a&gt;, we can simulate a lot of absolutely garbage links.&lt;&#x2F;p&gt;
+&lt;p&gt;Imagine a scenario where we have a geostationary satellite with about a 600ms RTT that is experiencing 30% packet loss:&lt;&#x2F;p&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery&#x2F;ring_600ms_30pl.png&quot; alt=&quot;Graph showing properties of the Ring toy protocol sending data over a terrible link&quot; &#x2F;&gt;
+&lt;p&gt;As you can see, we are sending about 900 &lt;code&gt;Commands&lt;&#x2F;code&gt; per second. Our MTU is 1500, and each command contains 16 bytes of payload (imagine a telemetry counter, or something similar). And I should point out, that TCP would not even function under these circumstances. At 20ms of latency, TCP stopped working at around 17% loss. This connection is &lt;em&gt;significantly&lt;&#x2F;em&gt; worse than that in regards to both packet loss and latency.&lt;&#x2F;p&gt;
+&lt;p&gt;With 300ms of delay in each direction, and a packet loss of 30% (10% more than the threshold for TCP becoming non-functional at a lower latency), our passive retransmission strategy allows for extremely reliable delivery:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;--- Summary ---
+&lt;&#x2F;span&gt;&lt;span&gt;Loss rate:             30.0%
+&lt;&#x2F;span&gt;&lt;span&gt;RTT (final est.):    500.00ms
+&lt;&#x2F;span&gt;&lt;span&gt;Commands sent:         10000
+&lt;&#x2F;span&gt;&lt;span&gt;Commands acked:        10000
+&lt;&#x2F;span&gt;&lt;span&gt;Commands delivered:    10000
+&lt;&#x2F;span&gt;&lt;span&gt;Total retransmits:        12
+&lt;&#x2F;span&gt;&lt;span&gt;OK  sent == acked == delivered
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;We only needed to retransmit 12 commands in total. The astute reader would notice that this is much worse than our theoretical loss probability as mentioned above, at 30% loss we should be having about 1 failure per 170,000 messages (versus the observed ~1 &#x2F; 1,000). The main reason for this is that we are not duplicating our ACKs. Since we are ack-ing every time we receive a new message, and our acks are cumulative, we usually send enough of them that losing 30% is not problematic mid-stream. The trouble is at the end of the transmission: once we stop receiving new messages, we stop ack-ing. If those final acks are lost, the sender mistakenly assumes the last bits of data were not delivered and the backup retransmission mechanism kicks in.&lt;&#x2F;p&gt;
+&lt;p&gt;You can see this more clearly if we crank the loss probability up even higher:&lt;&#x2F;p&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery&#x2F;ring_50p_loss.png&quot; alt=&quot;Graph showing properties of the Ring toy protocol sending data over a terrible link&quot; &#x2F;&gt;
+&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;--- Summary ---
+&lt;&#x2F;span&gt;&lt;span&gt;Loss rate:             50.0%
+&lt;&#x2F;span&gt;&lt;span&gt;RTT (final est.):    500.00ms
+&lt;&#x2F;span&gt;&lt;span&gt;Commands sent:         10000
+&lt;&#x2F;span&gt;&lt;span&gt;Commands acked:        10000
+&lt;&#x2F;span&gt;&lt;span&gt;Commands delivered:    10000
+&lt;&#x2F;span&gt;&lt;span&gt;Total retransmits:        27
+&lt;&#x2F;span&gt;&lt;span&gt;OK  sent == acked == delivered
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Despite the loss rate of 50%, our retransmissions mid-stream are nonexistent. However now the tail on the retransmit recovery at the end of the stream is longer, because now only half of our acks make it from the receiver to the transmitter. We could fix this by repeating the last ack at a fixed rate to ensure delivery, but considering this is a toy protocol I think it does a good enough job of demonstrating the concept for now.&lt;&#x2F;p&gt;
+&lt;p&gt;And, at the extremes, the protocol can still function. Here is an example of 600ms of latency and &lt;strong&gt;90%&lt;&#x2F;strong&gt; packet loss:&lt;&#x2F;p&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery&#x2F;ring_90p_loss.png&quot; alt=&quot;Graph showing properties of the Ring toy protocol sending data over an atrocious link&quot; &#x2F;&gt;
+&lt;p&gt;As you can see, we are stalling quite frequently (whenever the window hits 100%, the sender will continually re-transmit the old buffer without adding new items to it until it starts getting acks again). And once again, it&#x27;s the acks that are the issue here. If we didn&#x27;t care about reliable delivery, and we were simply tossing the buffer out to the wind and letting what happens happen, the receiver would still succeed in receiving a lot of the commands. Which is definitely something to consider, especially if all you care about is the most recent state of a sensor as opposed to making sure you collect every observation on the remote side. But the most challenging version of this problem is reliable and ordered delivery, which is why I focused on that.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;protocol-spec&quot;&gt;Protocol Spec&lt;&#x2F;h2&gt;
+&lt;p&gt;If the benchmarks have you wondering exactly how the protocol achieves this, here is a more detailed breakdown of what the sender and receiver are actually doing.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;sender&quot;&gt;Sender&lt;&#x2F;h3&gt;
+&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;Sender state
+&lt;&#x2F;span&gt;&lt;span&gt;  ring:          Vec&amp;lt;Option&amp;lt;Command&amp;gt;&amp;gt;  &#x2F;&#x2F; circular array of RING_BUF_CAPACITY slots
+&lt;&#x2F;span&gt;&lt;span&gt;  ring_head_seq: u32                   &#x2F;&#x2F; oldest slot still occupied
+&lt;&#x2F;span&gt;&lt;span&gt;  next_seq:      u32                   &#x2F;&#x2F; next sequence number to assign
+&lt;&#x2F;span&gt;&lt;span&gt;  unacked:       HashMap&amp;lt;u32, (Command, Instant)&amp;gt;
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;On &lt;code&gt;push_command(payload)&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;Assign &lt;code&gt;seq = next_seq++&lt;&#x2F;code&gt; and store the command in &lt;code&gt;ring[seq % RING_BUF_CAPACITY]&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;li&gt;If the slot was already occupied (ring wrapped around), evict the old command and advance &lt;code&gt;ring_head_seq&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;li&gt;Compute how many commands fit in one datagram:&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;per_cmd  = 1 (variant) + 4 (seq) + 2 (compact length) + payload.len()
+&lt;&#x2F;span&gt;&lt;span&gt;max_cmds = (MAX_MESSAGE_SIZE − 2) &#x2F; per_cmd
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;Build a snapshot from &lt;code&gt;max(ring_head_seq, seq − max_cmds + 1)&lt;&#x2F;code&gt; through &lt;code&gt;seq&lt;&#x2F;code&gt; inclusive.&lt;&#x2F;li&gt;
+&lt;li&gt;Return the &lt;code&gt;Message&lt;&#x2F;code&gt;; the transport layer sends it as a single UDP datagram.&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;p&gt;On &lt;code&gt;handle_ack(seq)&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Remove all commands with sequence number ≤ &lt;code&gt;seq&lt;&#x2F;code&gt; from &lt;code&gt;unacked&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;li&gt;Return the RTT sample for &lt;code&gt;seq&lt;&#x2F;code&gt; (time since last send).&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;On &lt;code&gt;handle_nacks(responses)&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;For each &lt;code&gt;RetransmitRequest { seq }&lt;&#x2F;code&gt;, look up the command in &lt;code&gt;unacked&lt;&#x2F;code&gt;, reset its send timestamp, and include it in a retransmit &lt;code&gt;Message&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;On &lt;code&gt;retransmit_aged(threshold)&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Find all &lt;code&gt;unacked&lt;&#x2F;code&gt; commands whose last-send timestamp is older than &lt;code&gt;threshold&lt;&#x2F;code&gt; (typically 1.5× smoothed RTT).&lt;&#x2F;li&gt;
+&lt;li&gt;Package the oldest &lt;code&gt;max_cmds&lt;&#x2F;code&gt; of them into a single &lt;code&gt;Message&lt;&#x2F;code&gt; and reset their timestamps.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h3 id=&quot;receiver&quot;&gt;Receiver&lt;&#x2F;h3&gt;
+&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;Receiver state
+&lt;&#x2F;span&gt;&lt;span&gt;  next_to_deliver: u32                  &#x2F;&#x2F; highest contiguous seq delivered so far + 1
+&lt;&#x2F;span&gt;&lt;span&gt;  buffer:          HashMap&amp;lt;u32, Vec&amp;lt;u8&amp;gt;&amp;gt; &#x2F;&#x2F; out-of-order data awaiting gap fill
+&lt;&#x2F;span&gt;&lt;span&gt;  highest_seen:    Option&amp;lt;u32&amp;gt;          &#x2F;&#x2F; furthest-ahead seq received
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;On &lt;code&gt;handle_message(msg)&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;For each &lt;code&gt;Data { seq, payload }&lt;&#x2F;code&gt; in the message:
+&lt;ul&gt;
+&lt;li&gt;Skip if &lt;code&gt;seq &amp;lt; next_to_deliver&lt;&#x2F;code&gt; (already delivered).&lt;&#x2F;li&gt;
+&lt;li&gt;Skip if already buffered.&lt;&#x2F;li&gt;
+&lt;li&gt;Otherwise, insert into &lt;code&gt;buffer&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;Drain &lt;code&gt;buffer&lt;&#x2F;code&gt; contiguously starting at &lt;code&gt;next_to_deliver&lt;&#x2F;code&gt;, advancing the delivery frontier.&lt;&#x2F;li&gt;
+&lt;li&gt;Emit one &lt;code&gt;Ack { seq: next_to_deliver − 1 }&lt;&#x2F;code&gt; (cumulative acknowledgment).&lt;&#x2F;li&gt;
+&lt;li&gt;Emit one &lt;code&gt;RetransmitRequest { seq }&lt;&#x2F;code&gt; for each gap between the frontier and &lt;code&gt;highest_seen&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;h2 id=&quot;prior-art&quot;&gt;Prior Art&lt;&#x2F;h2&gt;
+&lt;p&gt;This isn&#x27;t a novel idea. Redundant UDP delivery is a well-worn strategy, particularly in game networking, where low latency matters more than the guarantees TCP provides.&lt;&#x2F;p&gt;
+&lt;p&gt;The classic articulation of this is the Tribes Networking Model, described by Mark Frohnmayer and Tim Gift in 2000. Tribes stuffed guaranteed and non-guaranteed messages together into every outgoing packet, using a similar philosophy: cheap redundancy beats expensive retransmission on marginal links.&lt;&#x2F;p&gt;
+&lt;p&gt;Modern game engines follow the same playbook. Valve&#x27;s Steam Datagram Relay and ENet (used in countless indie titles) both implement reliable-over-UDP layers with redundant transmission. Glenn Fiedler&#x27;s writing on game networking is probably the most cited resource on the topic and is worth reading if this post piqued your interest.&lt;&#x2F;p&gt;
+&lt;p&gt;It also shows up outside of games. VoIP and WebRTC use &lt;a href=&quot;https:&#x2F;&#x2F;datatracker.ietf.org&#x2F;doc&#x2F;html&#x2F;rfc2198&quot;&gt;RFC 2198&lt;&#x2F;a&gt;, a redundancy extension for RTP that piggybacks the previous audio frame onto the current packet — so a single lost packet doesn&#x27;t produce an audible gap on the other end. Same core idea: accept the bandwidth overhead, eliminate the retransmit round-trip.&lt;&#x2F;p&gt;
+&lt;p&gt;The version here is deliberately minimal. Real implementations add packet pacing, more nuanced NACK strategies, and dynamic W adjustment. But the core mechanic is the same: use your spare bandwidth to make loss someone else&#x27;s problem.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;summary&quot;&gt;Summary&lt;&#x2F;h2&gt;
+&lt;p&gt;TCP is an engineering marvel optimized for the common case: a congested internet where backing off is the polite and correct thing to do. But politeness is a liability when the link itself is the problem. High packet loss triggers congestion control, congestion control shrinks the window, and on a high-latency link the slow recovery from that shrink effectively kills your throughput.&lt;&#x2F;p&gt;
+&lt;p&gt;The core insight here is that you have to trade bandwidth for reliability. How you make that trade depends on what you&#x27;re sending:&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;One critical message&lt;&#x2F;strong&gt;: just repeat it. Sending 10 copies at 30% loss gives you a failure probability around 1 in 170,000. Sending 25 copies at 90% loss still gets you to 93%. No ACKs, no state, no RTT tax. Just keep repeating it until the link improves, or you have a different message to send.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;A stream of small messages&lt;&#x2F;strong&gt;: stuff the recent history into every outgoing packet. A command that rides along in W consecutive messages goes undelivered only if all W are dropped, a p^W event. At 30% loss with W=10, that&#x27;s roughly 1 failure per 170,000 commands, and in practice the benchmarks show almost no mid-stream retransmissions at all even at 50% loss on a 600ms link.&lt;&#x2F;p&gt;
+&lt;p&gt;The catch is overhead. W=10 means you&#x27;re sending 10× the raw data. If your payloads are small, W climbs quickly. At an MTU of 1500: 16-byte payloads give you W=63, which is excellent for reliability but expensive on a bandwidth-constrained link. The right operating point depends on your payload size, your loss rate, and whether you can afford the retransmit latency of falling back to NACK-driven recovery.&lt;&#x2F;p&gt;
+&lt;p&gt;None of this is magic. It&#x27;s just the math of independent tries working in your favor, plus the observation that some &amp;quot;reliable delivery&amp;quot; problems can be solved by not being stingy with spare bandwidth. Larger byte streams such as firmware updates are a different problem entirely, and one we&#x27;ll look at next.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;1&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;1&lt;&#x2F;sup&gt;
+&lt;p&gt;Explicit Congestion Notifications are probably better, but that is another topic entirely.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;2&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;2&lt;&#x2F;sup&gt;
+&lt;p&gt;Except when any kind of segmentation occurs.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;3&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;3&lt;&#x2F;sup&gt;
+&lt;p&gt;For the purposes of brevity, I&#x27;m going to gloss over the fact that the send buffer and send window are different things and are usually not exactly the same size.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;4&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;4&lt;&#x2F;sup&gt;
+&lt;p&gt;Slow start is a system to...ironically...make scaling up the cwnd faster on new or recovering connections. Once the system is out of slow start and the regular congestion control algorithm takes over, the growth in the cwnd slows significantly on connections with higher RTTs. There are many alternate algorithms and different tunings to reduce the impact of this, but they often have sharp edges and are not the default on most systems and platforms.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;8&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;5&lt;&#x2F;sup&gt;
+&lt;p&gt;If you repeat these experiments on a different computer on the local loopback using TC for traffic disruption as I have done here, you might note that the total throughput will likely change due to differences in memory bandwidth and such, but the important thing to pay attention to about these graphs is the general shape of them, which won&#x27;t change. Nor will the cutoff for when it ceases to function (latency being equal).&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;9&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;6&lt;&#x2F;sup&gt;
+&lt;p&gt;I&#x27;m also very sorry for sneaking a logarithmically scaled graph in here.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;6&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;7&lt;&#x2F;sup&gt;
+&lt;p&gt;Definitely not the case with any VHF radios. Many non-commercial UHF radios used for applications like Ardupilot tend to be around 128-512 bytes which is big enough that this &lt;em&gt;might&lt;&#x2F;em&gt; be practical. It&#x27;s probably more useful for high end IP based systems like Ethernet-bridging radios where the MTU approaches what you might normally see over public internet links (~1500 bytes).&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;5&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;8&lt;&#x2F;sup&gt;
+&lt;p&gt;Foreshadowing :)&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;7&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;9&lt;&#x2F;sup&gt;
+&lt;p&gt;Otherwise we would need to optimize this system in the other direction: make the frames as small as possible, and send them more frequently.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+</content>
+        
+    </entry>
+</feed>

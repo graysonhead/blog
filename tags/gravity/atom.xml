@@ -1,0 +1,874 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <title> - Gravity</title>
+    <link href="https://blog.graysonhead.net/tags/gravity/atom.xml" rel="self" type="application/atom+xml"/>
+    <link href="https://blog.graysonhead.net"/>
+    <generator uri="https://www.getzola.org/">Zola</generator>
+    <updated>2025-11-14T00:00:00+00:00</updated>
+    <id>https://blog.graysonhead.net/tags/gravity/atom.xml</id>
+    <entry xml:lang="en">
+        <title>Bevy Systems: Gravity</title>
+        <published>2025-11-14T00:00:00+00:00</published>
+        <updated>2025-11-14T00:00:00+00:00</updated>
+        <author>
+          <name>Unknown</name>
+        </author>
+        <link rel="alternate" href="https://blog.graysonhead.net/posts/bevy-gravity/" type="text/html"/>
+        <id>https://blog.graysonhead.net/posts/bevy-gravity/</id>
+        
+        <content type="html">&lt;p&gt;&lt;canvas id=&quot;bevy-demo&quot;&gt;&lt;&#x2F;canvas&gt;&lt;&#x2F;p&gt;
+&lt;script type=&quot;module&quot;&gt;
+    import init, { run_demo } from &#x27;..&#x2F;..&#x2F;wasm&#x2F;gravity&#x2F;demo&#x2F;gravity_wasm.js&#x27;;
+
+    async function run() {
+        try {
+            await init();
+            run_demo();
+            document.getElementById(&#x27;loading&#x27;).style.display = &#x27;none&#x27;;
+        } catch (e) {
+            console.error(&#x27;Failed to load WASM:&#x27;, e);
+            document.getElementById(&#x27;loading&#x27;).innerHTML = &#x27;&lt;h2&gt;Error loading simulation&lt;&#x2F;h2&gt;&lt;p&gt;Please check the console for details.&lt;&#x2F;p&gt;&#x27;;
+        }
+    }
+
+    run();
+&lt;&#x2F;script&gt;
+&lt;p&gt;I haven&#x27;t had a lot of free time lately, but my desire to start a million projects I&#x27;ll never finish has in no way diminished. I&#x27;ve been thinking about these projects during car rides, birthday parties, and those 3am wake-ups where I suddenly realize a better way to do something I haven&#x27;t touched in 5 years.&lt;&#x2F;p&gt;
+&lt;p&gt;After watching &lt;a href=&quot;https:&#x2F;&#x2F;www.youtube.com&#x2F;watch?v=QPuIysZxXwM&quot;&gt;Make Systems Not Games&lt;&#x2F;a&gt;, I decided to focus on building modular, reusable systems instead of complete game prototypes. This is one of those systems. It was quick to build. But only because I&#x27;d failed at it enough times before to know what problems I needed to solve. (And because Claude handled the easy parts, plus some hard parts with coaching.)&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;what-this-is&quot;&gt;What This Is&lt;&#x2F;h2&gt;
+&lt;p&gt;This is an &lt;strong&gt;n-body gravity simulator&lt;&#x2F;strong&gt; for Bevy. Not the gravity you&#x27;d find in a physics engine like &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;dimforge&#x2F;rapier&quot;&gt;Rapier&lt;&#x2F;a&gt;, but the kind you&#x27;d find in Kerbal Space Program or Universe Sandbox. The kind where you fly a spaceship around planets and have to reason about orbital mechanics and delta-v budgets like some kind of masochist who enjoys pain (or has a degree in aerospace engineering, or just played a lot of KSP).&lt;&#x2F;p&gt;
+&lt;p&gt;This post walks through three key challenges I had to solve:&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;Scale and Units&lt;&#x2F;strong&gt;: How do you simulate both planetary orbits and surface-level physics without floating-point errors destroying everything?&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;Integration Accuracy&lt;&#x2F;strong&gt;: How do you keep orbits stable over thousands of simulation steps without them decaying into chaos?&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;Time Acceleration&lt;&#x2F;strong&gt;: How do you speed up time 1000x without breaking the physics?&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;p&gt;There are limitations to doing this in realtime. Some of which I could fix with CUDA, but that would turn a 4-day project into a 4-week project. What&#x27;s here is &amp;quot;Good Enough&amp;quot; for the scale I&#x27;m considering.&lt;&#x2F;p&gt;
+&lt;p&gt;Let&#x27;s dive in.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;challenge-1-scale-and-units&quot;&gt;Challenge 1: Scale and Units&lt;&#x2F;h2&gt;
+&lt;p&gt;The first problem with gravity simulations is scale. You might want to simulate:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Surface-level physics (meters and kilograms)&lt;&#x2F;li&gt;
+&lt;li&gt;Planetary systems (thousands of kilometers, Earth masses)&lt;&#x2F;li&gt;
+&lt;li&gt;Solar systems (astronomical units, solar masses)&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;If you use real-world values directly, you&#x27;ll end up with floating-point precision errors and numbers like &lt;code&gt;1.989e30&lt;&#x2F;code&gt; scattered throughout your code. The solution is a configurable unit system that lets you define what &amp;quot;1 unit&amp;quot; means in your simulation:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span&gt;#[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;derive&lt;&#x2F;span&gt;&lt;span&gt;(Debug, Clone, Resource)]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub struct &lt;&#x2F;span&gt;&lt;span&gt;GravityConfig {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Length scale defining how real-world distances map to game coordinates.
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Examples:
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; - `Length::from_meters(1.0)`: 1 Bevy unit = 1 meter (surface scale)
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; - `Length::from_kilometers(1.0)`: 1 Bevy unit = 1 km (regional scale)
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; - `Length::from_au(0.01)`: 1 Bevy unit = 0.01 AU (solar system scale)
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;length_scale&lt;&#x2F;span&gt;&lt;span&gt;: Length,
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Mass scale allowing scaling masses to avoid very large&#x2F;small numbers.
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Examples:
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; - `Mass::from_kg(1.0)`: Mass values represent kilograms directly
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; - `Mass::earth()`: Mass values represent Earth masses
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; - `Mass::from_kg(1.989e30)`: Mass values represent Solar masses
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;mass_scale&lt;&#x2F;span&gt;&lt;span&gt;: Mass,
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;impl &lt;&#x2F;span&gt;&lt;span&gt;GravityConfig {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Configuration optimized for solar system simulations.
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;solar_system&lt;&#x2F;span&gt;&lt;span&gt;() -&amp;gt; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;Self &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;Self &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;            length_scale: Length::from_au(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0.01&lt;&#x2F;span&gt;&lt;span&gt;),     &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; 0.01 AU per unit
+&lt;&#x2F;span&gt;&lt;span&gt;            mass_scale: Mass::earth(),               &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Earth masses
+&lt;&#x2F;span&gt;&lt;span&gt;        }
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Configuration optimized for planetary system simulations (Earth-Moon scale).
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;planetary&lt;&#x2F;span&gt;&lt;span&gt;() -&amp;gt; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;Self &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;Self &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;            length_scale: Length::from_kilometers(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1000.0&lt;&#x2F;span&gt;&lt;span&gt;), &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; 1000 km per unit
+&lt;&#x2F;span&gt;&lt;span&gt;            mass_scale: Mass::earth(),                      &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Earth masses
+&lt;&#x2F;span&gt;&lt;span&gt;        }
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Configuration optimized for atmospheric and near-surface operations.
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;atmospheric&lt;&#x2F;span&gt;&lt;span&gt;() -&amp;gt; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;Self &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;Self &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;            length_scale: Length::from_kilometers(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1.0&lt;&#x2F;span&gt;&lt;span&gt;),    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; 1 km per unit
+&lt;&#x2F;span&gt;&lt;span&gt;            mass_scale: Mass::earth(),                      &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Earth masses
+&lt;&#x2F;span&gt;&lt;span&gt;        }
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Configuration optimized for surface operations and small-scale physics.
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;surface&lt;&#x2F;span&gt;&lt;span&gt;() -&amp;gt; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;Self &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;Self &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;            length_scale: Length::from_meters(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1.0&lt;&#x2F;span&gt;&lt;span&gt;),         &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; 1 meter per unit
+&lt;&#x2F;span&gt;&lt;span&gt;            mass_scale: Mass::from_kg(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1.0&lt;&#x2F;span&gt;&lt;span&gt;),                 &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; 1 kg per unit
+&lt;&#x2F;span&gt;&lt;span&gt;        }
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Get the effective gravitational constant for this scale configuration.
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; The gravitational constant is scaled according to the unit conversions:
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; G_effective = G_real * (mass_scale) &#x2F; (length_scale³)
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;gravitational_constant&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;) -&amp;gt; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;f32 &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;const &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;G_SI&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;f32 &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;6.674e-11&lt;&#x2F;span&gt;&lt;span&gt;; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; m³&#x2F;(kg⋅s²)
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Scale conversions for space and mass units
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;G_SI &lt;&#x2F;span&gt;&lt;span&gt;* &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.mass_scale.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;kg&lt;&#x2F;span&gt;&lt;span&gt;() &#x2F; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.length_scale.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;meters&lt;&#x2F;span&gt;&lt;span&gt;().&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;powi&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;3&lt;&#x2F;span&gt;&lt;span&gt;)
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Convert a real-world distance (in meters) to Bevy units.
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;meters_to_units&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;meters&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;f32&lt;&#x2F;span&gt;&lt;span&gt;) -&amp;gt; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;f32 &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;        meters &#x2F; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.length_scale.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;meters&lt;&#x2F;span&gt;&lt;span&gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Convert Bevy units to real-world distance (in meters).
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;units_to_meters&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;units&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;f32&lt;&#x2F;span&gt;&lt;span&gt;) -&amp;gt; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;f32 &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;        units * &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.length_scale.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;meters&lt;&#x2F;span&gt;&lt;span&gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Convert a real-world mass (in kg) to simulation mass units.
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;kg_to_mass_units&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;kg&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;f32&lt;&#x2F;span&gt;&lt;span&gt;) -&amp;gt; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;f32 &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;        kg &#x2F; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.mass_scale.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;kg&lt;&#x2F;span&gt;&lt;span&gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Convert simulation mass units to real-world mass (in kg).
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;mass_units_to_kg&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;mass_units&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;f32&lt;&#x2F;span&gt;&lt;span&gt;) -&amp;gt; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;f32 &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;        mass_units * &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.mass_scale.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;kg&lt;&#x2F;span&gt;&lt;span&gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;This was the missing piece in my previous failed attempts. Different games need different scales; a full-scale solar system simulation with 1:1 timescale would be incredibly boring. This config lets you tune the simulation while preserving physical accuracy.&lt;&#x2F;p&gt;
+&lt;p&gt;I also wanted type-safe units throughout the simulation. The challenge is that Bevy&#x27;s reflection system needs to understand these values. UOM&#x27;s units don&#x27;t implement &lt;code&gt;Reflect&lt;&#x2F;code&gt;, so I created wrapper components that convert between type-safe units and Bevy&#x27;s internal representation.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;components&quot;&gt;Components&lt;&#x2F;h3&gt;
+&lt;p&gt;With the scale system in place, entities need three things:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span&gt;#[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;derive&lt;&#x2F;span&gt;&lt;span&gt;(Reflect, Component, Default)]
+&lt;&#x2F;span&gt;&lt;span&gt;#[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;reflect&lt;&#x2F;span&gt;&lt;span&gt;(Component)]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub struct &lt;&#x2F;span&gt;&lt;span&gt;CelestialBody {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;velocity&lt;&#x2F;span&gt;&lt;span&gt;: Vec3,
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Marker component for bodies that should remain fixed in position.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Pinned bodies are immune to gravitational forces but still exert gravitational influence on other bodies.
+&lt;&#x2F;span&gt;&lt;span&gt;#[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;derive&lt;&#x2F;span&gt;&lt;span&gt;(Reflect, Component, Default)]
+&lt;&#x2F;span&gt;&lt;span&gt;#[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;reflect&lt;&#x2F;span&gt;&lt;span&gt;(Component)]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub struct &lt;&#x2F;span&gt;&lt;span&gt;Pinned;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Mass component with type-safe units that supports Bevy reflection.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; This wraps the UOM Mass type to provide compile-time unit safety while
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; maintaining compatibility with Bevy&amp;#39;s reflection system.
+&lt;&#x2F;span&gt;&lt;span&gt;#[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;derive&lt;&#x2F;span&gt;&lt;span&gt;(Component, Reflect, Clone, Debug)]
+&lt;&#x2F;span&gt;&lt;span&gt;#[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;reflect&lt;&#x2F;span&gt;&lt;span&gt;(Component)]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub struct &lt;&#x2F;span&gt;&lt;span&gt;Mass {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Raw mass value in kilograms (for reflection&#x2F;serialization)
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;kilograms&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;f32&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Type-safe mass quantity (ignored by reflection to avoid UOM issues)
+&lt;&#x2F;span&gt;&lt;span&gt;    #[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;reflect&lt;&#x2F;span&gt;&lt;span&gt;(ignore)]
+&lt;&#x2F;span&gt;&lt;span&gt;    #[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;allow&lt;&#x2F;span&gt;&lt;span&gt;(dead_code)]
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;inner&lt;&#x2F;span&gt;&lt;span&gt;: uom::si::f32::Mass,
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Entities need a &lt;code&gt;CelestialBody&lt;&#x2F;code&gt; component to participate in gravity, a &lt;code&gt;Mass&lt;&#x2F;code&gt; to know how much gravitational influence they have, and optionally &lt;code&gt;Pinned&lt;&#x2F;code&gt; if they should stay fixed (like a sun that doesn&#x27;t move but still pulls on planets).&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;challenge-2-integration-accuracy&quot;&gt;Challenge 2: Integration Accuracy&lt;&#x2F;h2&gt;
+&lt;p&gt;Now for the tricky part: actually simulating orbits over time. The basic gravity calculation is straightforward:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;calculate_velocity_impact&lt;&#x2F;span&gt;&lt;span&gt;(
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;our_transform&lt;&#x2F;span&gt;&lt;span&gt;: &amp;amp;GlobalTransform,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;our_mass&lt;&#x2F;span&gt;&lt;span&gt;: &amp;amp;Mass,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;other_transform&lt;&#x2F;span&gt;&lt;span&gt;: &amp;amp;GlobalTransform,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;other_mass&lt;&#x2F;span&gt;&lt;span&gt;: &amp;amp;Mass,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;time_step_secs&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;f32&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;) -&amp;gt; Vec3 {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; our_body_transform = our_transform.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;translation&lt;&#x2F;span&gt;&lt;span&gt;();
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; other_body_transform = other_transform.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;translation&lt;&#x2F;span&gt;&lt;span&gt;();
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; distance = our_body_transform.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;distance&lt;&#x2F;span&gt;&lt;span&gt;(other_body_transform);
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; direction = (other_body_transform - our_body_transform).&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;normalize&lt;&#x2F;span&gt;&lt;span&gt;();
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; force_magnitude = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;GRAVITY &lt;&#x2F;span&gt;&lt;span&gt;* (our_mass.mass * other_mass.mass) &#x2F; distance.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;powi&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;2&lt;&#x2F;span&gt;&lt;span&gt;);
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; force = direction * force_magnitude;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; acceleration = force &#x2F; our_mass.mass;
+&lt;&#x2F;span&gt;&lt;span&gt;    acceleration * time_step_secs
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Then you need a system to move the object based on its velocity:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;update_position&lt;&#x2F;span&gt;&lt;span&gt;(
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;bodies&lt;&#x2F;span&gt;&lt;span&gt;: Query&amp;lt;(&amp;amp;CelestialBody, &amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span&gt; Transform)&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;time&lt;&#x2F;span&gt;&lt;span&gt;: Res&amp;lt;Time&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;) {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;for &lt;&#x2F;span&gt;&lt;span&gt;(body, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span&gt; transform) in &amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span&gt; bodies {
+&lt;&#x2F;span&gt;&lt;span&gt;        transform.translation -= body.velocity * time.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;delta_seconds&lt;&#x2F;span&gt;&lt;span&gt;();
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;And this works. This would be the most naive way to do integration, known as Euler. Specifically Symplectic Euler (because we are figuring out our velocity, then applying it instead of the other way around). You will see objects orbit each other, but eventually all your orbits will degrade. We can figure this out by calculating the total energy (potential + kinetic) of the orbital system and plotting it over time. And the greater the time step, (how much time delta elapsed between each update) the worse the drift gets. &lt;&#x2F;p&gt;
+&lt;p&gt;To understand why timestep size matters so much with integration, let&#x27;s use a simpler analogy.&lt;&#x2F;p&gt;
+&lt;p&gt;Imagine simulating a car. And lets say you have a system where you only update the velocity every second. Cars initially accelerate very fast, but their acceleration slows down as air resistance, gearing limitations, and power vs force relationship come into play. Now lets imagine you have two cars and you are going to have a drag race. Each car has the same acceleration curve, but one car&#x27;s velocity will update every second, and the second car&#x27;s velocity will update every two seconds. Which car will win? The second car, by a pretty non-trivial amount&lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#1&quot;&gt;1&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;:&lt;&#x2F;p&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;gravity&#x2F;drag_race.png&quot; alt=&quot;Plot of the position of both cars, showing car B ahead&quot; &#x2F;&gt;
+&lt;p&gt;And this is probably intuitive. The car that is calculating its velocity every 2 seconds is accelerating faster for longer. The calculations for its current acceleration aren&#x27;t wrong, they just aren&#x27;t happening in realtime.&lt;&#x2F;p&gt;
+&lt;p&gt;But, we can make our approximation a bit better. Lets try out a different integration strategy, known as leapfrog&lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#2&quot;&gt;2&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;:&lt;&#x2F;p&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;gravity&#x2F;drag_race_2.png&quot; alt=&quot;Plot of the position of all 4 cars, showing the two leapfrog integrated cars much closer to reality&quot; &#x2F;&gt;
+&lt;p&gt;It doesn&#x27;t completely solve this whole time step and integration accuracy issue. It is a bit more accurate though. And it does entirely solve some other problems.&lt;&#x2F;p&gt;
+&lt;p&gt;The main benefit of leapfrog in the context of Gravitational approximations is that the integration errors don&#x27;t accumulate like they do with Euler. You can see this on the graph by comparing Euler at dt=1s (blue dot) to Leapfrog at dt=1s. Even though they should be more or less identical, the Leapfrog integration is more conservative. You can see this more at dt=2s. And this effect would be greatly exaggerated at time steps that are an order of magnitude above that. It would also get worse the more steps you simulate.&lt;&#x2F;p&gt;
+&lt;p&gt;Another benefit: Leapfrog is &lt;strong&gt;reversible&lt;&#x2F;strong&gt;. Negate time and apply the same steps in reverse, and you&#x27;ll get right back to where you started. This would be important if I were insane enough to implement this in a multiplayer game with rollback netcode. (I&#x27;m not, don&#x27;t worry.)&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;implementing-leapfrog-for-gravity&quot;&gt;Implementing Leapfrog for Gravity&lt;&#x2F;h3&gt;
+&lt;p&gt;Leapfrog integration works in two phases:&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;Kick&lt;&#x2F;strong&gt;: Update velocities using current positions: &lt;code&gt;v(t+dt&#x2F;2) = v(t-dt&#x2F;2) + a(t) * dt&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;Drift&lt;&#x2F;strong&gt;: Update positions using new velocities: &lt;code&gt;x(t+dt) = x(t) + v(t+dt&#x2F;2) * dt&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;p&gt;The key is that positions and velocities are evaluated at &lt;strong&gt;staggered time points&lt;&#x2F;strong&gt;: positions at integer timesteps, velocities at half-timesteps. This leapfrogging is why it can conserve energy on average.&lt;&#x2F;p&gt;
+&lt;p&gt;The implementation is quite involved (took me a while to get the math right, and I&#x27;m still not 100% sure there aren&#x27;t bugs). The high-level flow:&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;Snapshot positions&lt;&#x2F;strong&gt; - Capture all body positions at time &lt;code&gt;t&lt;&#x2F;code&gt; for consistent force calculations&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;Initialize on first run&lt;&#x2F;strong&gt; - Bootstrap velocities to half-timestep: &lt;code&gt;v(-dt&#x2F;2) = v(0) - a(0) * dt&#x2F;2&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;Kick phase&lt;&#x2F;strong&gt; - Update all velocities from &lt;code&gt;v(t-dt&#x2F;2)&lt;&#x2F;code&gt; to &lt;code&gt;v(t+dt&#x2F;2)&lt;&#x2F;code&gt; using forces at &lt;code&gt;x(t)&lt;&#x2F;code&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;strong&gt;Drift phase&lt;&#x2F;strong&gt; - Update all positions from &lt;code&gt;x(t)&lt;&#x2F;code&gt; to &lt;code&gt;x(t+dt)&lt;&#x2F;code&gt; using new velocities&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;p&gt;The tricky part is the initialization step: Leapfrog needs velocities at half-timesteps, so on the first frame we do a half-step &lt;em&gt;backwards&lt;&#x2F;em&gt; to get &lt;code&gt;v(-dt&#x2F;2)&lt;&#x2F;code&gt; from the initial &lt;code&gt;v(0)&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Trait for integration methods
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub trait &lt;&#x2F;span&gt;&lt;span&gt;Integrator {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Perform a single integration step
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;integrate_step&lt;&#x2F;span&gt;&lt;span&gt;(
+&lt;&#x2F;span&gt;&lt;span&gt;        &amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;bodies&lt;&#x2F;span&gt;&lt;span&gt;: &amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut &lt;&#x2F;span&gt;&lt;span&gt;Query&amp;lt;(Entity, &amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span&gt; CelestialBody, &amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span&gt; Transform, &amp;amp;GlobalTransform)&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;masses&lt;&#x2F;span&gt;&lt;span&gt;: &amp;amp;Query&amp;lt;(Entity, &amp;amp;Mass, &amp;amp;GlobalTransform)&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pinned_bodies&lt;&#x2F;span&gt;&lt;span&gt;: &amp;amp;Query&amp;lt;Entity, With&amp;lt;Pinned&amp;gt;&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;config&lt;&#x2F;span&gt;&lt;span&gt;: &amp;amp;GravityConfig,
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;dt&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;f32&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    );
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;impl &lt;&#x2F;span&gt;&lt;span&gt;Integrator &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;for &lt;&#x2F;span&gt;&lt;span&gt;Leapfrog {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;integrate_step&lt;&#x2F;span&gt;&lt;span&gt;(
+&lt;&#x2F;span&gt;&lt;span&gt;        &amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;bodies&lt;&#x2F;span&gt;&lt;span&gt;: &amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut &lt;&#x2F;span&gt;&lt;span&gt;Query&amp;lt;(Entity, &amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span&gt; CelestialBody, &amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span&gt; Transform, &amp;amp;GlobalTransform)&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;masses&lt;&#x2F;span&gt;&lt;span&gt;: &amp;amp;Query&amp;lt;(Entity, &amp;amp;Mass, &amp;amp;GlobalTransform)&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pinned_bodies&lt;&#x2F;span&gt;&lt;span&gt;: &amp;amp;Query&amp;lt;Entity, With&amp;lt;Pinned&amp;gt;&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;config&lt;&#x2F;span&gt;&lt;span&gt;: &amp;amp;GravityConfig,
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;dt&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;f32&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    ) {
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; ═══════════════════════════════════════════════════════════════════════════════
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; LEAPFROG INTEGRATION ALGORITHM
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; ═══════════════════════════════════════════════════════════════════════════════
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; The Leapfrog integrator is a second-order symplectic integration method that
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; preserves phase space volume and conserves energy over long time periods.
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Unlike Euler or RK4, it maintains time-reversibility and stability.
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Position and velocity are evaluated at staggered time points:
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   - Positions x are evaluated at integer timesteps: t, t+dt, t+2dt, ...
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   - Velocities v are evaluated at half-timesteps: t-dt&#x2F;2, t+dt&#x2F;2, t+3dt&#x2F;2, ...
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; This &amp;quot;leapfrogging&amp;quot; of position and velocity gives the method its name and
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; its superior energy conservation properties.
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; ALGORITHM (Kick-Drift form):
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   1. KICK:  v(t+dt&#x2F;2) = v(t-dt&#x2F;2) + a(t) * dt
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   2. DRIFT: x(t+dt)   = x(t) + v(t+dt&#x2F;2) * dt
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Where:
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   - a(t) is acceleration computed from gravitational forces at position x(t)
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   - The &amp;quot;kick&amp;quot; updates velocity using the full timestep dt
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   - The &amp;quot;drift&amp;quot; updates position using the newly updated velocity
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; ═══════════════════════════════════════════════════════════════════════════════
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; ───────────────────────────────────────────────────────────────────────────────
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; STEP 0: SNAPSHOT CURRENT POSITIONS
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; ───────────────────────────────────────────────────────────────────────────────
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; We need to compute accelerations at time t using positions x(t).
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; During the kick phase, we&amp;#39;ll be mutably iterating over bodies to update
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; velocities.
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; This ensures all bodies use consistent, simultaneous positions when computing
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; gravitational forces, preventing inconsistencies in the force calculation.
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; body_positions: Vec&amp;lt;(Entity, Vec3)&amp;gt; = bodies
+&lt;&#x2F;span&gt;&lt;span&gt;            .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;iter&lt;&#x2F;span&gt;&lt;span&gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;            .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;map&lt;&#x2F;span&gt;&lt;span&gt;(|(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;entity&lt;&#x2F;span&gt;&lt;span&gt;, _, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;transform&lt;&#x2F;span&gt;&lt;span&gt;, _)| (entity, transform.translation))
+&lt;&#x2F;span&gt;&lt;span&gt;            .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;collect&lt;&#x2F;span&gt;&lt;span&gt;();
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; ───────────────────────────────────────────────────────────────────────────────
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; INITIALIZATION PHASE (First Call Only)
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; ───────────────────────────────────────────────────────────────────────────────
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; When the simulation starts, we have:
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   - Positions at time t=0: x(0)
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   - Velocities at time t=0: v(0)
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Leapfrog requires velocities at half-timesteps. Specifically, to start
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; the first full integration step, we need v(-dt&#x2F;2) not v(0).
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; So, On the very first call, we apply a &amp;quot;half-step backwards kick&amp;quot; to convert
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; v(0) into v(-dt&#x2F;2). This initialization ensures the staggered time grid
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; is properly established.
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; After initialization:
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   - Positions remain at x(0)
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   - Velocities are now at v(-dt&#x2F;2)
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   - Future steps will maintain this half-timestep offset
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; We return immediately after initialization to avoid doing a full integration
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; step in the same call. This ensures the user sees the correct initial state
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; and the first full step happens on the next call to integrate_step().
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; SAFETY: We access mutable static LEAPFROG_FIRST_RUN to track initialization state.
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; This is safe because Bevy&amp;#39;s schedule runs systems sequentially in a single thread,
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; ensuring no concurrent access. The flag is only modified here and in reset_integrator_state().
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;unsafe &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;if &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;LEAPFROG_FIRST_RUN &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; ─────────────────────────────────────────────────────────────────────
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; INITIALIZATION LOOP: Compute v(-dt&#x2F;2) from v(0)
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; ─────────────────────────────────────────────────────────────────────
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;for &lt;&#x2F;span&gt;&lt;span&gt;(entity, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span&gt; body, _transform, _global_transform) in bodies.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;iter_mut&lt;&#x2F;span&gt;&lt;span&gt;() {
+&lt;&#x2F;span&gt;&lt;span&gt;                    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Pinned bodies never move; enforce zero velocity
+&lt;&#x2F;span&gt;&lt;span&gt;                    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;if&lt;&#x2F;span&gt;&lt;span&gt; pinned_bodies.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;contains&lt;&#x2F;span&gt;&lt;span&gt;(entity) {
+&lt;&#x2F;span&gt;&lt;span&gt;                        body.velocity = Vec3::&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;ZERO&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;                        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;continue&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;                    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;                    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Retrieve this body&amp;#39;s mass
+&lt;&#x2F;span&gt;&lt;span&gt;                    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; our_mass = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;match&lt;&#x2F;span&gt;&lt;span&gt; masses
+&lt;&#x2F;span&gt;&lt;span&gt;                        .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;iter&lt;&#x2F;span&gt;&lt;span&gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;                        .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;filter&lt;&#x2F;span&gt;&lt;span&gt;(|(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;iter_entity&lt;&#x2F;span&gt;&lt;span&gt;, ..)| iter_entity == &amp;amp;entity)
+&lt;&#x2F;span&gt;&lt;span&gt;                        .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;map&lt;&#x2F;span&gt;&lt;span&gt;(|(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;_iter_entity&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;mass&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;_transform&lt;&#x2F;span&gt;&lt;span&gt;)| mass)
+&lt;&#x2F;span&gt;&lt;span&gt;                        .collect::&amp;lt;Vec&amp;lt;&amp;amp;Mass&amp;gt;&amp;gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;                        .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;pop&lt;&#x2F;span&gt;&lt;span&gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;                    {
+&lt;&#x2F;span&gt;&lt;span&gt;                        Some(mass) =&amp;gt; mass,
+&lt;&#x2F;span&gt;&lt;span&gt;                        None =&amp;gt; &amp;amp;Mass::default(),
+&lt;&#x2F;span&gt;&lt;span&gt;                    };
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;                    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Retrieve this body&amp;#39;s position from the snapshot
+&lt;&#x2F;span&gt;&lt;span&gt;                    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; our_position = body_positions.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;iter&lt;&#x2F;span&gt;&lt;span&gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;                        .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;find&lt;&#x2F;span&gt;&lt;span&gt;(|(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;e&lt;&#x2F;span&gt;&lt;span&gt;, _)| e == &amp;amp;entity)
+&lt;&#x2F;span&gt;&lt;span&gt;                        .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;map&lt;&#x2F;span&gt;&lt;span&gt;(|(_, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pos&lt;&#x2F;span&gt;&lt;span&gt;)| *pos)
+&lt;&#x2F;span&gt;&lt;span&gt;                        .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;unwrap_or&lt;&#x2F;span&gt;&lt;span&gt;(Vec3::&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;ZERO&lt;&#x2F;span&gt;&lt;span&gt;);
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;                    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Compute acceleration from all other bodies at time t=0
+&lt;&#x2F;span&gt;&lt;span&gt;                    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; and apply a NEGATIVE half-timestep to move velocity backwards in time
+&lt;&#x2F;span&gt;&lt;span&gt;                    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;for &lt;&#x2F;span&gt;&lt;span&gt;(other_entity, other_mass, _other_transform) in masses.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;iter&lt;&#x2F;span&gt;&lt;span&gt;() {
+&lt;&#x2F;span&gt;&lt;span&gt;                        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;if&lt;&#x2F;span&gt;&lt;span&gt; entity != other_entity {
+&lt;&#x2F;span&gt;&lt;span&gt;                            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; other_position = body_positions.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;iter&lt;&#x2F;span&gt;&lt;span&gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;                                .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;find&lt;&#x2F;span&gt;&lt;span&gt;(|(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;e&lt;&#x2F;span&gt;&lt;span&gt;, _)| e == &amp;amp;other_entity)
+&lt;&#x2F;span&gt;&lt;span&gt;                                .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;map&lt;&#x2F;span&gt;&lt;span&gt;(|(_, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pos&lt;&#x2F;span&gt;&lt;span&gt;)| *pos)
+&lt;&#x2F;span&gt;&lt;span&gt;                                .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;unwrap_or&lt;&#x2F;span&gt;&lt;span&gt;(Vec3::&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;ZERO&lt;&#x2F;span&gt;&lt;span&gt;);
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;                            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Apply: v(-dt&#x2F;2) = v(0) + a(0) * (-dt&#x2F;2)
+&lt;&#x2F;span&gt;&lt;span&gt;                            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; The negative timestep is critical for backwards integration
+&lt;&#x2F;span&gt;&lt;span&gt;                            body.velocity += &lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;calculate_velocity_impact_between_positions&lt;&#x2F;span&gt;&lt;span&gt;(
+&lt;&#x2F;span&gt;&lt;span&gt;                                config,
+&lt;&#x2F;span&gt;&lt;span&gt;                                our_position,
+&lt;&#x2F;span&gt;&lt;span&gt;                                our_mass,
+&lt;&#x2F;span&gt;&lt;span&gt;                                other_position,
+&lt;&#x2F;span&gt;&lt;span&gt;                                other_mass,
+&lt;&#x2F;span&gt;&lt;span&gt;                                -dt * &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0.5&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; NEGATIVE half-timestep
+&lt;&#x2F;span&gt;&lt;span&gt;                            );
+&lt;&#x2F;span&gt;&lt;span&gt;                        }
+&lt;&#x2F;span&gt;&lt;span&gt;                    }
+&lt;&#x2F;span&gt;&lt;span&gt;                }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Mark initialization complete; future calls will execute normal steps
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;LEAPFROG_FIRST_RUN &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;false&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Here, we return without performing a full integration step.
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; At this point we have:
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   - x(0) (unchanged positions)
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   - v(-dt&#x2F;2) (initialized velocities)
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; The next call will perform the first full kick-drift cycle.
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;return&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;            }
+&lt;&#x2F;span&gt;&lt;span&gt;        }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; ═══════════════════════════════════════════════════════════════════════════════
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; MAIN INTEGRATION STEP (Kick-Drift)
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; ═══════════════════════════════════════════════════════════════════════════════
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; At entry to this section, we have:
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   - Position at full timestep
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   - Velocity at half-timestep
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; We will produce:
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   - Position at next full timestep
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   - Velocity at next half-timestep
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; ═══════════════════════════════════════════════════════════════════════════════
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; ───────────────────────────────────────────────────────────────────────────────
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; PHASE 1: KICK
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; ───────────────────────────────────────────────────────────────────────────────
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Update velocities from v(t - dt&#x2F;2) to v(t + dt&#x2F;2)
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; WHERE:
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   - a(t) is acceleration computed from gravitational forces at x(t)
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   - We use the FULL timestep dt (not dt&#x2F;2) because we&amp;#39;re spanning from
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;     (t - dt&#x2F;2) to (t + dt&#x2F;2), which is a full timestep interval
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; We MUST compute velocities before updating positions because:
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   1. Acceleration a(t) depends on positions x(t)
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   2. If we updated positions first, we&amp;#39;d have x(t+dt), invalidating a(t)
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   3. The kick-drift order preserves the algorithm&amp;#39;s symplectic structure
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; PHYSICAL INTERPRETATION:
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   We&amp;#39;re applying the gravitational force at the current positions to
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   &amp;quot;kick&amp;quot; the velocities forward by a full timestep. This represents
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   the momentum change due to forces acting over the interval.
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;for &lt;&#x2F;span&gt;&lt;span&gt;(entity, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span&gt; body, _transform, _global_transform) in bodies.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;iter_mut&lt;&#x2F;span&gt;&lt;span&gt;() {
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Pinned bodies are immobile; enforce zero velocity
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;if&lt;&#x2F;span&gt;&lt;span&gt; pinned_bodies.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;contains&lt;&#x2F;span&gt;&lt;span&gt;(entity) {
+&lt;&#x2F;span&gt;&lt;span&gt;                body.velocity = Vec3::&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;ZERO&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;continue&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;            }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Retrieve this body&amp;#39;s mass
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; our_mass = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;match&lt;&#x2F;span&gt;&lt;span&gt; masses
+&lt;&#x2F;span&gt;&lt;span&gt;                .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;iter&lt;&#x2F;span&gt;&lt;span&gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;                .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;filter&lt;&#x2F;span&gt;&lt;span&gt;(|(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;iter_entity&lt;&#x2F;span&gt;&lt;span&gt;, ..)| iter_entity == &amp;amp;entity)
+&lt;&#x2F;span&gt;&lt;span&gt;                .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;map&lt;&#x2F;span&gt;&lt;span&gt;(|(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;_iter_entity&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;mass&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;_transform&lt;&#x2F;span&gt;&lt;span&gt;)| mass)
+&lt;&#x2F;span&gt;&lt;span&gt;                .collect::&amp;lt;Vec&amp;lt;&amp;amp;Mass&amp;gt;&amp;gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;                .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;pop&lt;&#x2F;span&gt;&lt;span&gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;            {
+&lt;&#x2F;span&gt;&lt;span&gt;                Some(mass) =&amp;gt; mass,
+&lt;&#x2F;span&gt;&lt;span&gt;                None =&amp;gt; &amp;amp;Mass::default(),
+&lt;&#x2F;span&gt;&lt;span&gt;            };
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Retrieve this body&amp;#39;s position from the snapshot at time t
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; our_position = body_positions.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;iter&lt;&#x2F;span&gt;&lt;span&gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;                .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;find&lt;&#x2F;span&gt;&lt;span&gt;(|(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;e&lt;&#x2F;span&gt;&lt;span&gt;, _)| e == &amp;amp;entity)
+&lt;&#x2F;span&gt;&lt;span&gt;                .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;map&lt;&#x2F;span&gt;&lt;span&gt;(|(_, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pos&lt;&#x2F;span&gt;&lt;span&gt;)| *pos)
+&lt;&#x2F;span&gt;&lt;span&gt;                .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;unwrap_or&lt;&#x2F;span&gt;&lt;span&gt;(Vec3::&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;ZERO&lt;&#x2F;span&gt;&lt;span&gt;);
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Accumulate gravitational acceleration from all other bodies
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; using positions at time t (from the snapshot)
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;for &lt;&#x2F;span&gt;&lt;span&gt;(other_entity, other_mass, _other_transform) in masses.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;iter&lt;&#x2F;span&gt;&lt;span&gt;() {
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;if&lt;&#x2F;span&gt;&lt;span&gt; entity != other_entity {
+&lt;&#x2F;span&gt;&lt;span&gt;                    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; other_position = body_positions.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;iter&lt;&#x2F;span&gt;&lt;span&gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;                        .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;find&lt;&#x2F;span&gt;&lt;span&gt;(|(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;e&lt;&#x2F;span&gt;&lt;span&gt;, _)| e == &amp;amp;other_entity)
+&lt;&#x2F;span&gt;&lt;span&gt;                        .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;map&lt;&#x2F;span&gt;&lt;span&gt;(|(_, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pos&lt;&#x2F;span&gt;&lt;span&gt;)| *pos)
+&lt;&#x2F;span&gt;&lt;span&gt;                        .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;unwrap_or&lt;&#x2F;span&gt;&lt;span&gt;(Vec3::&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;ZERO&lt;&#x2F;span&gt;&lt;span&gt;);
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;                    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Apply: v(t+dt&#x2F;2) = v(t-dt&#x2F;2) + a(t) * dt
+&lt;&#x2F;span&gt;&lt;span&gt;                    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; This function computes Δv = a * dt from gravitational force
+&lt;&#x2F;span&gt;&lt;span&gt;                    body.velocity += &lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;calculate_velocity_impact_between_positions&lt;&#x2F;span&gt;&lt;span&gt;(
+&lt;&#x2F;span&gt;&lt;span&gt;                        config,
+&lt;&#x2F;span&gt;&lt;span&gt;                        our_position,
+&lt;&#x2F;span&gt;&lt;span&gt;                        our_mass,
+&lt;&#x2F;span&gt;&lt;span&gt;                        other_position,
+&lt;&#x2F;span&gt;&lt;span&gt;                        other_mass,
+&lt;&#x2F;span&gt;&lt;span&gt;                        dt, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; FULL timestep (not dt&#x2F;2!)
+&lt;&#x2F;span&gt;&lt;span&gt;                    );
+&lt;&#x2F;span&gt;&lt;span&gt;                }
+&lt;&#x2F;span&gt;&lt;span&gt;            }
+&lt;&#x2F;span&gt;&lt;span&gt;        }
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; At this point:
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   - Positions are still at x(t)
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   - Velocities are now at v(t + dt&#x2F;2)
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; ───────────────────────────────────────────────────────────────────────────────
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; PHASE 2: DRIFT
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; ───────────────────────────────────────────────────────────────────────────────
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   We use v(t + dt&#x2F;2), which is the velocity at the MIDPOINT of the
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   time interval
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   Using the midpoint velocity rather than v(t) or v(t+dt) is what gives
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   Leapfrog its second-order accuracy and symplectic properties.
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   With the updated velocities from the kick phase, we &amp;quot;drift&amp;quot; the positions
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   forward. This represents ballistic motion with the newly computed momentum.
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   We must update all velocities before updating any positions to maintain
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   the symplectic structure. If we interleaved kick and drift for each body,
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   we&amp;#39;d break time-reversibility and lose energy conservation.
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;for &lt;&#x2F;span&gt;&lt;span&gt;(entity, body, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span&gt; transform, _global_transform) in bodies.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;iter_mut&lt;&#x2F;span&gt;&lt;span&gt;() {
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Pinned bodies don&amp;#39;t move; skip position update
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;if&lt;&#x2F;span&gt;&lt;span&gt; pinned_bodies.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;contains&lt;&#x2F;span&gt;&lt;span&gt;(entity) {
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;continue&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;            }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Apply: x(t+dt) = x(t) + v(t+dt&#x2F;2) * dt
+&lt;&#x2F;span&gt;&lt;span&gt;            transform.translation += body.velocity * dt;
+&lt;&#x2F;span&gt;&lt;span&gt;        }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; ═══════════════════════════════════════════════════════════════════════════════
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; POST-STEP STATE
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; ═══════════════════════════════════════════════════════════════════════════════
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; After this integration step, the system state is:
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   - Positions are at x(t + dt)        [full timestep]
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   - Velocities are at v(t + dt&#x2F;2)     [half-timestep]
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Note that v(t + dt&#x2F;2) = v((t+dt) - dt&#x2F;2), so the half-timestep offset
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; is preserved for the next iteration.
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; NEXT ITERATION:
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   The next call will treat the current state as:
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;     x(t) ← x(t + dt)
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;     v(t - dt&#x2F;2) ← v(t + dt&#x2F;2)
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;   and perform another kick-drift cycle.
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; ═══════════════════════════════════════════════════════════════════════════════
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;h3 id=&quot;energy-conservation-results&quot;&gt;Energy Conservation Results&lt;&#x2F;h3&gt;
+&lt;p&gt;The proof is in the numbers. Running 100,000 simulation steps at 60Hz shows the difference. Pay particular attention to the &lt;strong&gt;Energy drift&lt;&#x2F;strong&gt; line in each result:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;Simulation configuration:
+&lt;&#x2F;span&gt;&lt;span&gt;  Steps: 100000
+&lt;&#x2F;span&gt;&lt;span&gt;  Timestep: 1&#x2F;60 second (60Hz physics update)
+&lt;&#x2F;span&gt;&lt;span&gt;  Total simulated time: 1666.7 seconds (27.78 minutes)
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;Running simulation with Symplectic Euler integrator (1x)...
+&lt;&#x2F;span&gt;&lt;span&gt;  Running 100000 updates at 1x speed (1 physics steps per update)...
+&lt;&#x2F;span&gt;&lt;span&gt;  Physics step 10000: Energy = -8.166741e-7, Drift = +1.250555e-12 (+0.0002%)
+&lt;&#x2F;span&gt;&lt;span&gt;  Physics step 20000: Energy = -8.166735e-7, Drift = +1.762146e-12 (+0.0002%)
+&lt;&#x2F;span&gt;&lt;span&gt;  Physics step 30000: Energy = -8.166739e-7, Drift = +1.364242e-12 (+0.0002%)
+&lt;&#x2F;span&gt;&lt;span&gt;  Physics step 40000: Energy = -8.166736e-7, Drift = +1.705303e-12 (+0.0002%)
+&lt;&#x2F;span&gt;&lt;span&gt;  Physics step 50000: Energy = -8.166731e-7, Drift = +2.216893e-12 (+0.0003%)
+&lt;&#x2F;span&gt;&lt;span&gt;  Physics step 60000: Energy = -8.166733e-7, Drift = +1.989520e-12 (+0.0002%)
+&lt;&#x2F;span&gt;&lt;span&gt;  Physics step 70000: Energy = -8.166747e-7, Drift = +5.684342e-13 (+0.0001%)
+&lt;&#x2F;span&gt;&lt;span&gt;  Physics step 80000: Energy = -8.166739e-7, Drift = +1.364242e-12 (+0.0002%)
+&lt;&#x2F;span&gt;&lt;span&gt;  Physics step 90000: Energy = -8.166728e-7, Drift = +2.501110e-12 (+0.0003%)
+&lt;&#x2F;span&gt;&lt;span&gt;  Physics step 100000: Energy = -8.166725e-7, Drift = +2.842171e-12 (+0.0003%)
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;======================================================================
+&lt;&#x2F;span&gt;&lt;span&gt;Symplectic Euler (1x speed) - Energy Conservation Statistics
+&lt;&#x2F;span&gt;&lt;span&gt;======================================================================
+&lt;&#x2F;span&gt;&lt;span&gt;Total physics steps: 100000
+&lt;&#x2F;span&gt;&lt;span&gt;Energy samples: 100000
+&lt;&#x2F;span&gt;&lt;span&gt;Initial energy: -8.166753e-7
+&lt;&#x2F;span&gt;&lt;span&gt;Final energy:   -8.166722e-7
+&lt;&#x2F;span&gt;&lt;span&gt;Energy drift:   3.126388e-12 (+0.0004%)
+&lt;&#x2F;span&gt;&lt;span&gt;Energy range:   4.376943e-12 (0.0005%)
+&lt;&#x2F;span&gt;&lt;span&gt;Min energy:     -8.166761e-7
+&lt;&#x2F;span&gt;&lt;span&gt;Max energy:     -8.166717e-7
+&lt;&#x2F;span&gt;&lt;span&gt;Std deviation:  5.339739e-12 (0.0007%)
+&lt;&#x2F;span&gt;&lt;span&gt;======================================================================
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;Running simulation with Leapfrog integrator (1x)...
+&lt;&#x2F;span&gt;&lt;span&gt;  Running 100000 updates at 1x speed (1 physics steps per update)...
+&lt;&#x2F;span&gt;&lt;span&gt;  Physics step 10000: Energy = -8.166750e-7, Drift = +2.842171e-13 (+0.0000%)
+&lt;&#x2F;span&gt;&lt;span&gt;  Physics step 20000: Energy = -8.166753e-7, Drift = +0.000000e0 (+0.0000%)
+&lt;&#x2F;span&gt;&lt;span&gt;  Physics step 30000: Energy = -8.166757e-7, Drift = -3.410605e-13 (-0.0000%)
+&lt;&#x2F;span&gt;&lt;span&gt;  Physics step 40000: Energy = -8.166762e-7, Drift = -9.094947e-13 (-0.0001%)
+&lt;&#x2F;span&gt;&lt;span&gt;  Physics step 50000: Energy = -8.166758e-7, Drift = -4.547474e-13 (-0.0001%)
+&lt;&#x2F;span&gt;&lt;span&gt;  Physics step 60000: Energy = -8.166767e-7, Drift = -1.364242e-12 (-0.0002%)
+&lt;&#x2F;span&gt;&lt;span&gt;  Physics step 70000: Energy = -8.166754e-7, Drift = -1.136868e-13 (-0.0000%)
+&lt;&#x2F;span&gt;&lt;span&gt;  Physics step 80000: Energy = -8.166760e-7, Drift = -7.389644e-13 (-0.0001%)
+&lt;&#x2F;span&gt;&lt;span&gt;  Physics step 90000: Energy = -8.166757e-7, Drift = -3.979039e-13 (-0.0000%)
+&lt;&#x2F;span&gt;&lt;span&gt;  Physics step 100000: Energy = -8.166747e-7, Drift = +5.684342e-13 (+0.0001%)
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;======================================================================
+&lt;&#x2F;span&gt;&lt;span&gt;Leapfrog (1x speed) - Energy Conservation Statistics
+&lt;&#x2F;span&gt;&lt;span&gt;======================================================================
+&lt;&#x2F;span&gt;&lt;span&gt;Total physics steps: 100000
+&lt;&#x2F;span&gt;&lt;span&gt;Energy samples: 100000
+&lt;&#x2F;span&gt;&lt;span&gt;Initial energy: -8.166753e-7
+&lt;&#x2F;span&gt;&lt;span&gt;Final energy:   -8.166744e-7
+&lt;&#x2F;span&gt;&lt;span&gt;Energy drift:   9.094947e-13 (+0.0001%)
+&lt;&#x2F;span&gt;&lt;span&gt;Energy range:   3.922196e-12 (0.0005%)
+&lt;&#x2F;span&gt;&lt;span&gt;Min energy:     -8.166778e-7
+&lt;&#x2F;span&gt;&lt;span&gt;Max energy:     -8.166738e-7
+&lt;&#x2F;span&gt;&lt;span&gt;Std deviation:  5.991950e-12 (0.0007%)
+&lt;&#x2F;span&gt;&lt;span&gt;======================================================================
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;strong&gt;Symplectic Euler&lt;&#x2F;strong&gt;: Energy drift of &lt;strong&gt;+0.0004%&lt;&#x2F;strong&gt; after 100,000 steps
+&lt;strong&gt;Leapfrog&lt;&#x2F;strong&gt;: Energy drift of &lt;strong&gt;+0.0001%&lt;&#x2F;strong&gt; after 100,000 steps&lt;&#x2F;p&gt;
+&lt;p&gt;Leapfrog conserves energy significantly better. And this is at 60Hz, the difference becomes dramatically larger with less frequent timesteps. At 10Hz or 1Hz (common for games that want to speed up time), Euler integration would show visible orbital decay while Leapfrog remains stable.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;challenge-3-time-acceleration&quot;&gt;Challenge 3: Time Acceleration&lt;&#x2F;h2&gt;
+&lt;p&gt;Watching orbits in real-time is pretty boring. &lt;&#x2F;p&gt;
+&lt;p&gt;But speeding up the simulation is not trivial. Normally if you wanted to do time acceleration in Bevy you would just do something like this:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;adjust_time_scale&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;keyboard&lt;&#x2F;span&gt;&lt;span&gt;: Res&amp;lt;ButtonInput&amp;lt;KeyCode&amp;gt;&amp;gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;time&lt;&#x2F;span&gt;&lt;span&gt;: ResMut&amp;lt;Time&amp;lt;Virtual&amp;gt;&amp;gt;) {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;if&lt;&#x2F;span&gt;&lt;span&gt; keyboard.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;just_pressed&lt;&#x2F;span&gt;&lt;span&gt;(KeyCode::ArrowUp) {
+&lt;&#x2F;span&gt;&lt;span&gt;        time.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;set_relative_speed&lt;&#x2F;span&gt;&lt;span&gt;(time.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;relative_speed&lt;&#x2F;span&gt;&lt;span&gt;() * &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;2.0&lt;&#x2F;span&gt;&lt;span&gt;);
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;if&lt;&#x2F;span&gt;&lt;span&gt; keyboard.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;just_pressed&lt;&#x2F;span&gt;&lt;span&gt;(KeyCode::ArrowDown) {
+&lt;&#x2F;span&gt;&lt;span&gt;        time.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;set_relative_speed&lt;&#x2F;span&gt;&lt;span&gt;(time.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;relative_speed&lt;&#x2F;span&gt;&lt;span&gt;() * &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0.5&lt;&#x2F;span&gt;&lt;span&gt;);
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;if&lt;&#x2F;span&gt;&lt;span&gt; keyboard.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;just_pressed&lt;&#x2F;span&gt;&lt;span&gt;(KeyCode::Space) {
+&lt;&#x2F;span&gt;&lt;span&gt;        time.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;set_relative_speed&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1.0&lt;&#x2F;span&gt;&lt;span&gt;);
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;But this doesn&#x27;t work for fixed-timestep gravity simulation. Here&#x27;s why: if you set &lt;code&gt;relative_speed&lt;&#x2F;code&gt; to 2.0, Bevy&#x27;s &lt;code&gt;FixedUpdate&lt;&#x2F;code&gt; still runs at 60Hz, but each step now represents twice as much time. Our gravity calculations would still run 60 times per second, but we&#x27;d be applying forces as if much more time had passed. This is the same problem as the car example: larger effective timesteps mean larger integration errors and unstable orbits.&lt;&#x2F;p&gt;
+&lt;p&gt;So to do that, we need to accumulate simulation frames when we accelerate time, and skip them when we decelerate time. &lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Resource for controlling simulation time scaling.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Supports both time acceleration (for interplanetary travel) and deceleration
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; (for precision maneuvers) while maintaining physics accuracy through multi-stepping.
+&lt;&#x2F;span&gt;&lt;span&gt;#[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;derive&lt;&#x2F;span&gt;&lt;span&gt;(Resource, Debug, Clone)]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub struct &lt;&#x2F;span&gt;&lt;span&gt;TimeScale {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Current time multiplier (1.0 = normal speed, 2.0 = 2x speed, 0.5 = half speed)
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;scale&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;f32&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Whether the simulation is currently paused
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;paused&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;bool&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Accumulated fractional steps for sub-1x speeds
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;step_accumulator&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;f32&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Maximum allowed time scale to prevent performance issues
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;max_scale&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;f32&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Minimum allowed time scale
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;min_scale&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;f32&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;impl &lt;&#x2F;span&gt;&lt;span&gt;Default &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;for &lt;&#x2F;span&gt;&lt;span&gt;TimeScale {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;default&lt;&#x2F;span&gt;&lt;span&gt;() -&amp;gt; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;Self &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;Self &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;            scale: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1.0&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;            paused: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;false&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;            step_accumulator: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0.0&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;            max_scale: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1000.0&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;            min_scale: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0.1&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;        }
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;impl &lt;&#x2F;span&gt;&lt;span&gt;TimeScale {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Create a new TimeScale with custom limits
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;new&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;min_scale&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;f32&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;max_scale&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;f32&lt;&#x2F;span&gt;&lt;span&gt;) -&amp;gt; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;Self &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;Self &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;            min_scale,
+&lt;&#x2F;span&gt;&lt;span&gt;            max_scale,
+&lt;&#x2F;span&gt;&lt;span&gt;            ..Default::default()
+&lt;&#x2F;span&gt;&lt;span&gt;        }
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Set the time scale, clamping to valid range
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;set_scale&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;scale&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;f32&lt;&#x2F;span&gt;&lt;span&gt;) {
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.scale = scale.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;clamp&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.min_scale, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.max_scale);
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.step_accumulator = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0.0&lt;&#x2F;span&gt;&lt;span&gt;; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Reset accumulator when scale changes
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Calculate how many physics steps to run this frame
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;calculate_physics_steps&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;) -&amp;gt; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u32 &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; effective_scale = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;effective_scale&lt;&#x2F;span&gt;&lt;span&gt;();
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;if&lt;&#x2F;span&gt;&lt;span&gt; effective_scale &amp;lt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0.0 &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;return &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0&lt;&#x2F;span&gt;&lt;span&gt;; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Paused
+&lt;&#x2F;span&gt;&lt;span&gt;        }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;if&lt;&#x2F;span&gt;&lt;span&gt; effective_scale &amp;gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1.0 &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; For speeds &amp;gt;= 1x, run multiple steps per frame
+&lt;&#x2F;span&gt;&lt;span&gt;            effective_scale.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;floor&lt;&#x2F;span&gt;&lt;span&gt;() as &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u32
+&lt;&#x2F;span&gt;&lt;span&gt;        } &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;else &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; For speeds &amp;lt; 1x, accumulate fractional steps
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.step_accumulator += effective_scale;
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;if &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.step_accumulator &amp;gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1.0 &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.step_accumulator -= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1.0&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1
+&lt;&#x2F;span&gt;&lt;span&gt;            } &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;else &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0
+&lt;&#x2F;span&gt;&lt;span&gt;            }
+&lt;&#x2F;span&gt;&lt;span&gt;        }
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;And this brings us conveniently back to the actual system that controls all of the physics, where these steps are actually run:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Physics update system that performs gravity integration using the configured integrator
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;update_physics&lt;&#x2F;span&gt;&lt;span&gt;(
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;bodies&lt;&#x2F;span&gt;&lt;span&gt;: Query&amp;lt;(Entity, &amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span&gt; CelestialBody, &amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span&gt; Transform, &amp;amp;GlobalTransform)&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;masses&lt;&#x2F;span&gt;&lt;span&gt;: Query&amp;lt;(Entity, &amp;amp;Mass, &amp;amp;GlobalTransform)&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;pinned_bodies&lt;&#x2F;span&gt;&lt;span&gt;: Query&amp;lt;Entity, With&amp;lt;Pinned&amp;gt;&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;time&lt;&#x2F;span&gt;&lt;span&gt;: Res&amp;lt;Time&amp;lt;Fixed&amp;gt;&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;config&lt;&#x2F;span&gt;&lt;span&gt;: Res&amp;lt;GravityConfig&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;integrator_config&lt;&#x2F;span&gt;&lt;span&gt;: Res&amp;lt;IntegratorConfig&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;time_scale&lt;&#x2F;span&gt;&lt;span&gt;: ResMut&amp;lt;TimeScale&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;) {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Calculate how many physics steps to run this frame based on time scale
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; steps_to_run = time_scale.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;calculate_physics_steps&lt;&#x2F;span&gt;&lt;span&gt;();
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;if&lt;&#x2F;span&gt;&lt;span&gt; steps_to_run == &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0 &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;return&lt;&#x2F;span&gt;&lt;span&gt;; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Paused or no steps needed this frame
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Use fixed timestep for all calculations to maintain determinism
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; dt = time.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;delta_secs&lt;&#x2F;span&gt;&lt;span&gt;();
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Run multiple physics steps for time acceleration
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;for&lt;&#x2F;span&gt;&lt;span&gt; _step in &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0&lt;&#x2F;span&gt;&lt;span&gt;..steps_to_run {
+&lt;&#x2F;span&gt;&lt;span&gt;        integrators::perform_integration_step(
+&lt;&#x2F;span&gt;&lt;span&gt;            integrator_config.method,
+&lt;&#x2F;span&gt;&lt;span&gt;            &amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span&gt; bodies,
+&lt;&#x2F;span&gt;&lt;span&gt;            &amp;amp;masses,
+&lt;&#x2F;span&gt;&lt;span&gt;            &amp;amp;pinned_bodies,
+&lt;&#x2F;span&gt;&lt;span&gt;            &amp;amp;config,
+&lt;&#x2F;span&gt;&lt;span&gt;            dt,
+&lt;&#x2F;span&gt;&lt;span&gt;        );
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;And very importantly, this system &lt;em&gt;must&lt;&#x2F;em&gt; be run at a fixed update:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;impl &lt;&#x2F;span&gt;&lt;span&gt;Plugin &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;for &lt;&#x2F;span&gt;&lt;span&gt;CelestialBodyPlugin {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;build&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;app&lt;&#x2F;span&gt;&lt;span&gt;: &amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span&gt; App) {
+&lt;&#x2F;span&gt;&lt;span&gt;        app.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;insert_resource&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.config.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;clone&lt;&#x2F;span&gt;&lt;span&gt;())
+&lt;&#x2F;span&gt;&lt;span&gt;            .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;insert_resource&lt;&#x2F;span&gt;&lt;span&gt;(PathPredictionConfig::default())
+&lt;&#x2F;span&gt;&lt;span&gt;            .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;insert_resource&lt;&#x2F;span&gt;&lt;span&gt;(TimeScale::default())
+&lt;&#x2F;span&gt;&lt;span&gt;            .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;insert_resource&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.integrator_config.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;clone&lt;&#x2F;span&gt;&lt;span&gt;())
+&lt;&#x2F;span&gt;&lt;span&gt;            .register_type::&amp;lt;CelestialBody&amp;gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;            .register_type::&amp;lt;Mass&amp;gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;            .register_type::&amp;lt;Length&amp;gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;            .register_type::&amp;lt;TimeInterval&amp;gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;            .register_type::&amp;lt;Pinned&amp;gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;            .register_type::&amp;lt;PathPrediction&amp;gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;            .register_type::&amp;lt;IntegratorConfig&amp;gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;            .register_type::&amp;lt;IntegratorType&amp;gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;            .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;add_systems&lt;&#x2F;span&gt;&lt;span&gt;(FixedUpdate, update_physics) &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; &amp;lt;- Here
+&lt;&#x2F;span&gt;&lt;span&gt;            .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;add_systems&lt;&#x2F;span&gt;&lt;span&gt;(Update, (
+&lt;&#x2F;span&gt;&lt;span&gt;                path_prediction::predict_paths,
+&lt;&#x2F;span&gt;&lt;span&gt;                path_prediction::update_path_visualizations,
+&lt;&#x2F;span&gt;&lt;span&gt;                path_prediction::cleanup_path_visualizations,
+&lt;&#x2F;span&gt;&lt;span&gt;            ).&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;chain&lt;&#x2F;span&gt;&lt;span&gt;());
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;And that covers the core mechanics.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;putting-it-all-together&quot;&gt;Putting It All Together&lt;&#x2F;h2&gt;
+&lt;p&gt;Here&#x27;s a minimal example showing how to use the plugin:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;use &lt;&#x2F;span&gt;&lt;span&gt;bevy::prelude::*;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;use &lt;&#x2F;span&gt;&lt;span&gt;bevy_gravity::*;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;main&lt;&#x2F;span&gt;&lt;span&gt;() {
+&lt;&#x2F;span&gt;&lt;span&gt;    App::new()
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Set black background
+&lt;&#x2F;span&gt;&lt;span&gt;        .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;insert_resource&lt;&#x2F;span&gt;&lt;span&gt;(ClearColor(Color::&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;BLACK&lt;&#x2F;span&gt;&lt;span&gt;))
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Add default Bevy plugins with window config
+&lt;&#x2F;span&gt;&lt;span&gt;        .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;add_plugins&lt;&#x2F;span&gt;&lt;span&gt;(DefaultPlugins.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;set&lt;&#x2F;span&gt;&lt;span&gt;(WindowPlugin {
+&lt;&#x2F;span&gt;&lt;span&gt;            primary_window: Some(Window {
+&lt;&#x2F;span&gt;&lt;span&gt;                title: &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;Minimal Two Body Orbit&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;into&lt;&#x2F;span&gt;&lt;span&gt;(),
+&lt;&#x2F;span&gt;&lt;span&gt;                resolution: (&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1200&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;800&lt;&#x2F;span&gt;&lt;span&gt;).&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;into&lt;&#x2F;span&gt;&lt;span&gt;(),
+&lt;&#x2F;span&gt;&lt;span&gt;                ..&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;default&lt;&#x2F;span&gt;&lt;span&gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;            }),
+&lt;&#x2F;span&gt;&lt;span&gt;            ..&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;default&lt;&#x2F;span&gt;&lt;span&gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;        }))
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Add gravity simulation plugin with scale settings
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; 1 unit = 1000 km, masses measured in Earth masses
+&lt;&#x2F;span&gt;&lt;span&gt;        .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;add_plugins&lt;&#x2F;span&gt;&lt;span&gt;(CelestialBodyPlugin {
+&lt;&#x2F;span&gt;&lt;span&gt;            config: GravityConfig {
+&lt;&#x2F;span&gt;&lt;span&gt;                length_scale: Length::from_kilometers(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1000.0&lt;&#x2F;span&gt;&lt;span&gt;),
+&lt;&#x2F;span&gt;&lt;span&gt;                mass_scale: Mass::earth(),
+&lt;&#x2F;span&gt;&lt;span&gt;            },
+&lt;&#x2F;span&gt;&lt;span&gt;            ..&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;default&lt;&#x2F;span&gt;&lt;span&gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;        })
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Configure orbital path prediction
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; This draws the predicted orbit paths for each body
+&lt;&#x2F;span&gt;&lt;span&gt;        .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;insert_resource&lt;&#x2F;span&gt;&lt;span&gt;(PathPredictionConfig {
+&lt;&#x2F;span&gt;&lt;span&gt;            prediction_steps: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;100000&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;            prediction_timestep: TimeInterval::from_seconds(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1.0 &lt;&#x2F;span&gt;&lt;span&gt;&#x2F; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;60.0&lt;&#x2F;span&gt;&lt;span&gt;),
+&lt;&#x2F;span&gt;&lt;span&gt;            enabled: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;true&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;            auto_disable_threshold: None,
+&lt;&#x2F;span&gt;&lt;span&gt;        })
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Set time acceleration to 10x speed
+&lt;&#x2F;span&gt;&lt;span&gt;        .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;insert_resource&lt;&#x2F;span&gt;&lt;span&gt;(TimeScale {
+&lt;&#x2F;span&gt;&lt;span&gt;            scale: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;10.0&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;            ..Default::default()
+&lt;&#x2F;span&gt;&lt;span&gt;        })
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Run setup functions on startup
+&lt;&#x2F;span&gt;&lt;span&gt;        .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;add_systems&lt;&#x2F;span&gt;&lt;span&gt;(Startup, (spawn_camera, spawn_scene))
+&lt;&#x2F;span&gt;&lt;span&gt;        .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;run&lt;&#x2F;span&gt;&lt;span&gt;();
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;spawn_camera&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;commands&lt;&#x2F;span&gt;&lt;span&gt;: Commands) {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Camera positioned above the scene looking down at the orbital plane
+&lt;&#x2F;span&gt;&lt;span&gt;    commands.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;spawn&lt;&#x2F;span&gt;&lt;span&gt;((
+&lt;&#x2F;span&gt;&lt;span&gt;        Camera3d::default(),
+&lt;&#x2F;span&gt;&lt;span&gt;        Transform::from_xyz(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0.0&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;8.0&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0.0&lt;&#x2F;span&gt;&lt;span&gt;).&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;looking_at&lt;&#x2F;span&gt;&lt;span&gt;(Vec3::&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;ZERO&lt;&#x2F;span&gt;&lt;span&gt;, Vec3::Z),
+&lt;&#x2F;span&gt;&lt;span&gt;    ));
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;spawn_scene&lt;&#x2F;span&gt;&lt;span&gt;(
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;commands&lt;&#x2F;span&gt;&lt;span&gt;: Commands,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;meshes&lt;&#x2F;span&gt;&lt;span&gt;: ResMut&amp;lt;Assets&amp;lt;Mesh&amp;gt;&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;materials&lt;&#x2F;span&gt;&lt;span&gt;: ResMut&amp;lt;Assets&amp;lt;StandardMaterial&amp;gt;&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;config&lt;&#x2F;span&gt;&lt;span&gt;: Res&amp;lt;GravityConfig&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;) {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Add a light source so we can see the spheres
+&lt;&#x2F;span&gt;&lt;span&gt;    commands.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;spawn&lt;&#x2F;span&gt;&lt;span&gt;((
+&lt;&#x2F;span&gt;&lt;span&gt;        PointLight {
+&lt;&#x2F;span&gt;&lt;span&gt;            intensity: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1500.0&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;            shadows_enabled: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;true&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;            ..&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;default&lt;&#x2F;span&gt;&lt;span&gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;        },
+&lt;&#x2F;span&gt;&lt;span&gt;        Transform::from_xyz(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;4.0&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;8.0&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;4.0&lt;&#x2F;span&gt;&lt;span&gt;),
+&lt;&#x2F;span&gt;&lt;span&gt;    ));
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Create the central body at the origin
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; This is a blue sphere with Earth&amp;#39;s mass that stays stationary
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; central_mass = Mass::earth();
+&lt;&#x2F;span&gt;&lt;span&gt;    commands.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;spawn&lt;&#x2F;span&gt;&lt;span&gt;((
+&lt;&#x2F;span&gt;&lt;span&gt;        Mesh3d(meshes.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;add&lt;&#x2F;span&gt;&lt;span&gt;(Sphere::new(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0.4&lt;&#x2F;span&gt;&lt;span&gt;))),
+&lt;&#x2F;span&gt;&lt;span&gt;        MeshMaterial3d(materials.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;add&lt;&#x2F;span&gt;&lt;span&gt;(StandardMaterial {
+&lt;&#x2F;span&gt;&lt;span&gt;            base_color: Color::srgb(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0.3&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0.7&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1.0&lt;&#x2F;span&gt;&lt;span&gt;),
+&lt;&#x2F;span&gt;&lt;span&gt;            ..&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;default&lt;&#x2F;span&gt;&lt;span&gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;        })),
+&lt;&#x2F;span&gt;&lt;span&gt;        Transform::from_xyz(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0.0&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0.0&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0.0&lt;&#x2F;span&gt;&lt;span&gt;),
+&lt;&#x2F;span&gt;&lt;span&gt;        central_mass.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;clone&lt;&#x2F;span&gt;&lt;span&gt;(),
+&lt;&#x2F;span&gt;&lt;span&gt;        CelestialBody {
+&lt;&#x2F;span&gt;&lt;span&gt;            velocity: Vec3::&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;ZERO&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;        },
+&lt;&#x2F;span&gt;&lt;span&gt;        PathPrediction {
+&lt;&#x2F;span&gt;&lt;span&gt;            display_path: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;true&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;            path_color: Color::srgb(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0.0&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1.0&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0.0&lt;&#x2F;span&gt;&lt;span&gt;),
+&lt;&#x2F;span&gt;&lt;span&gt;            max_display_points: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1000000&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;        },
+&lt;&#x2F;span&gt;&lt;span&gt;    ));
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Create the orbiting body
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Position it 1 unit away from center (1000 km in real space)
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; orbital_position = Vec3::new(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1.0&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0.0&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0.0&lt;&#x2F;span&gt;&lt;span&gt;);
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Orbit rotates around the Y axis (so orbit happens in the XZ plane)
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; orbit_axis = Vec3::Y;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Calculate the exact velocity needed for a stable circular orbit
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; This takes into account the central mass and distance
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; orbital_velocity = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;calculate_orbital_velocity_vector&lt;&#x2F;span&gt;&lt;span&gt;(
+&lt;&#x2F;span&gt;&lt;span&gt;        &amp;amp;config,
+&lt;&#x2F;span&gt;&lt;span&gt;        &amp;amp;central_mass,
+&lt;&#x2F;span&gt;&lt;span&gt;        orbital_position,
+&lt;&#x2F;span&gt;&lt;span&gt;        orbit_axis,
+&lt;&#x2F;span&gt;&lt;span&gt;    );
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Spawn the orbiting body as a gray sphere with the calculated velocity
+&lt;&#x2F;span&gt;&lt;span&gt;    commands.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;spawn&lt;&#x2F;span&gt;&lt;span&gt;((
+&lt;&#x2F;span&gt;&lt;span&gt;        Mesh3d(meshes.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;add&lt;&#x2F;span&gt;&lt;span&gt;(Sphere::new(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0.15&lt;&#x2F;span&gt;&lt;span&gt;))),
+&lt;&#x2F;span&gt;&lt;span&gt;        MeshMaterial3d(materials.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;add&lt;&#x2F;span&gt;&lt;span&gt;(StandardMaterial {
+&lt;&#x2F;span&gt;&lt;span&gt;            base_color: Color::srgb(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0.8&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0.8&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0.7&lt;&#x2F;span&gt;&lt;span&gt;),
+&lt;&#x2F;span&gt;&lt;span&gt;            ..&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;default&lt;&#x2F;span&gt;&lt;span&gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;        })),
+&lt;&#x2F;span&gt;&lt;span&gt;        Transform::from_translation(orbital_position),
+&lt;&#x2F;span&gt;&lt;span&gt;        Mass::from_kg(1e15),
+&lt;&#x2F;span&gt;&lt;span&gt;        CelestialBody {
+&lt;&#x2F;span&gt;&lt;span&gt;            velocity: orbital_velocity,
+&lt;&#x2F;span&gt;&lt;span&gt;        },
+&lt;&#x2F;span&gt;&lt;span&gt;        PathPrediction {
+&lt;&#x2F;span&gt;&lt;span&gt;            display_path: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;true&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;            path_color: Color::srgb(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1.0&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1.0&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0.0&lt;&#x2F;span&gt;&lt;span&gt;),
+&lt;&#x2F;span&gt;&lt;span&gt;            max_display_points: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1000000&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;        },
+&lt;&#x2F;span&gt;&lt;span&gt;    ));
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;h2 id=&quot;interactive-demo&quot;&gt;Interactive Demo&lt;&#x2F;h2&gt;
+&lt;p&gt;Check out an interactive demo &lt;a href=&quot;..&#x2F;..&#x2F;projects&#x2F;bevy-gravity&#x2F;&quot;&gt;here&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;h1 id=&quot;future-plans-and-actual-usage&quot;&gt;Future Plans, and Actual Usage&lt;&#x2F;h1&gt;
+&lt;p&gt;So, is all this practical for a real game? To be honest, probably not.&lt;&#x2F;p&gt;
+&lt;p&gt;It&#x27;s probably not practical to have &lt;em&gt;every single entity&lt;&#x2F;em&gt; participate in the n-body simulations. For one, having to predict the path of a bunch of other objects that are all subject to n-body physics themselves requires subjecting yourself to a lot of brute-force calculations (which is what the current path prediction does). The next time I pick this up, I&#x27;ll probably create a &lt;code&gt;PinnedOrbit&lt;&#x2F;code&gt; component, where a given entity can find a stable orbit around a &lt;code&gt;Pinned&lt;&#x2F;code&gt; entity, calculate a realistic orbit, and then just follow that path on rails for the rest of eternity. This would make sense for a game involving space craft with realistic orbital physics. In a stable orbital system, the orbits of the planets are not meaningfully going to change, and the mass of all the spacecraft zipping around aren&#x27;t going to meaningfully affect the trajectory of the planets due to the astronomical mass disparity. Calculating all that out would just be a waste of CPU cycles. &lt;&#x2F;p&gt;
+&lt;p&gt;But this does lay the groundwork for having to realistically navigate a solar system with real gravity in some kind of craft, which was the main goal anyways. &lt;&#x2F;p&gt;
+&lt;p&gt;Other practical considerations are that even with being able to set the &amp;quot;scale&amp;quot; of the gravity simulation via the config, there are probably still going to be situations where floating point errors arise. But I think this is something that could be solved with things the way they currently are. You might have a gravity system with all planets when the player entity is out in the middle of nowhere, and then transparently switch to a low orbit scale when the player entity is approaching a station for instance. With any game at a scale like this, some kind of &lt;a href=&quot;https:&#x2F;&#x2F;netherlands3d.eu&#x2F;docs&#x2F;developers&#x2F;features&#x2F;floating-origin&#x2F;&quot;&gt;floating origin&lt;&#x2F;a&gt; shenanigans are probably going to be necessary anyway. Extending that concept to the scale of the gravity situation probably makes sense. &lt;&#x2F;p&gt;
+&lt;p&gt;So having a bunch of fixed planets in fixed orbits, but subjecting the actual player entity (or entities) to n-body physics is much more reasonable. It&#x27;s transparent from a gameplay perspective, and much better optimized from a resource perspective.&lt;&#x2F;p&gt;
+&lt;p&gt;Check out the repo and examples &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;graysonhead&#x2F;bevy-gravity&quot;&gt;here&lt;&#x2F;a&gt; if you&#x27;d like to give it a spin.&lt;&#x2F;p&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;1&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;1&lt;&#x2F;sup&gt;
+&lt;p&gt;&lt;a href=&quot;https:&#x2F;&#x2F;gist.github.com&#x2F;graysonhead&#x2F;224810ebb92fe532444b56a45899d4eb&quot;&gt;Python implementation of Euler integration&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;2&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;2&lt;&#x2F;sup&gt;
+&lt;p&gt;&lt;a href=&quot;https:&#x2F;&#x2F;gist.github.com&#x2F;graysonhead&#x2F;afe5a20716d910b9ad2e1a47ae47d022&quot;&gt;Python implementation of Leapfrog integration&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+</content>
+        
+    </entry>
+</feed>
