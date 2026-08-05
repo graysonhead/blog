@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <title> - WASM</title>
+    <link href="https://blog.graysonhead.net/tags/wasm/atom.xml" rel="self" type="application/atom+xml"/>
+    <link href="https://blog.graysonhead.net"/>
+    <generator uri="https://www.getzola.org/">Zola</generator>
+    <updated>2025-11-30T00:00:00+00:00</updated>
+    <id>https://blog.graysonhead.net/tags/wasm/atom.xml</id>
+    <entry xml:lang="en">
+        <title>Bevy Gravity</title>
+        <published>2025-11-30T00:00:00+00:00</published>
+        <updated>2025-11-30T00:00:00+00:00</updated>
+        <author>
+          <name>Unknown</name>
+        </author>
+        <link rel="alternate" href="https://blog.graysonhead.net/projects/bevy-gravity/" type="text/html"/>
+        <id>https://blog.graysonhead.net/projects/bevy-gravity/</id>
+        
+        <content type="html">&lt;h2 id=&quot;project-description&quot;&gt;Project Description&lt;&#x2F;h2&gt;
+&lt;p&gt;This is an interactive WASM demo of &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;graysonhead&#x2F;bevy-gravity&quot;&gt;bevy-gravity&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;See the &lt;a href=&quot;..&#x2F;..&#x2F;posts&#x2F;bevy-gravity&#x2F;&quot;&gt;post&lt;&#x2F;a&gt; for more info.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;demo&quot;&gt;Demo&lt;&#x2F;h2&gt;
+&lt;div class=&quot;info&quot;&gt;
+&lt;p style=&quot;margin-top: 15px; font-size: 14px; color: #aaa;&quot;&gt;
+Press F1 in-game to view controls
+&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div id=&quot;loading&quot; class=&quot;loading&quot;&gt;
+&lt;h2&gt;Loading gravity simulation...&lt;&#x2F;h2&gt;
+&lt;p&gt;Please wait while the WASM module loads.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;p&gt;&lt;canvas id=&quot;bevy&quot;&gt;&lt;&#x2F;canvas&gt;&lt;&#x2F;p&gt;
+&lt;script type=&quot;module&quot;&gt;
+import init, { run_two_bodies } from &#x27;..&#x2F;..&#x2F;wasm&#x2F;gravity&#x2F;gravity_wasm.js&#x27;;
+
+async function run() {
+    try {
+        await init();
+        run_two_bodies();
+        document.getElementById(&#x27;loading&#x27;).style.display = &#x27;none&#x27;;
+    } catch (e) {
+        console.error(&#x27;Failed to load WASM:&#x27;, e);
+        document.getElementById(&#x27;loading&#x27;).innerHTML = &#x27;&lt;h2&gt;Error loading simulation&lt;&#x2F;h2&gt;&lt;p&gt;Please check the console for details.&lt;&#x2F;p&gt;&#x27;;
+    }
+}
+
+run();
+&lt;&#x2F;script&gt;</content>
+        
+    </entry>
+</feed>
