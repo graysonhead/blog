@@ -332,7 +332,7 @@ The core insight here is that you have to trade bandwidth for reliability. How y
 
 The catch is overhead. W=10 means you're sending 10× the raw data. If your payloads are small, W climbs quickly. At an MTU of 1500: 16-byte payloads give you W=63, which is excellent for reliability but expensive on a bandwidth-constrained link. The right operating point depends on your payload size, your loss rate, and whether you can afford the retransmit latency of falling back to NACK-driven recovery.
 
-None of this is magic. It's just the math of independent tries working in your favor, plus the observation that some "reliable delivery" problems can be solved by not being stingy with spare bandwidth. Larger byte streams such as firmware updates are a different problem entirely, and one we'll look at next.
+None of this is magic. It's just the math of independent tries working in your favor, plus the observation that some "reliable delivery" problems can be solved by not being stingy with spare bandwidth. Larger byte streams such as firmware updates are a different problem entirely, and one we look at next, in [Reliable Delivery Over Horrible Networks: Erasure Codes](@/posts/reliable_delivery_part_2.md).
 
 <br>
 <br>

@@ -1,0 +1,33 @@
+<div class="applet" data-applet="delivery-probability">
+  <div class="applet__controls">
+    <label class="applet__field">
+      <span>k (data shards)</span>
+      <input type="number" class="applet__input dp-input-k" min="1" step="1" inputmode="numeric">
+    </label>
+    <label class="applet__field">
+      <span>m (parity shards)</span>
+      <input type="number" class="applet__input dp-input-m" min="0" step="1" inputmode="numeric">
+    </label>
+    <div class="applet__field">
+      <span>Overhead</span>
+      <span class="dp-stat-overhead">-</span>
+    </div>
+  </div>
+
+  <p class="applet__error dp-error" hidden></p>
+
+  <div class="dp-table-wrap">
+    <table class="dp-table">
+      <thead>
+        <tr>
+          <th>Packet loss</th>
+          <th>P(successful delivery)</th>
+          <th>P(failure)</th>
+          <th>1 lost block every...</th>
+        </tr>
+      </thead>
+      <tbody class="dp-table-body"></tbody>
+    </table>
+  </div>
+</div>
+<script type="module" src="{{ get_url(path="js/apps/delivery-probability.js") }}"></script>

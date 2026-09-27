@@ -1,0 +1,46 @@
+<div class="applet" data-applet="reed-solomon">
+  <div class="applet__controls">
+    <label class="applet__field">
+      <span>k (data shards)</span>
+      <input type="number" class="applet__input rs-input-k" min="1" step="1" inputmode="numeric">
+    </label>
+    <label class="applet__field">
+      <span>m (parity shards)</span>
+      <input type="number" class="applet__input rs-input-m" min="0" step="1" inputmode="numeric">
+    </label>
+    <label class="applet__field">
+      <span>Object size</span>
+      <span class="applet__field-row">
+        <input type="number" class="applet__input rs-input-size" min="0" step="any">
+        <select class="applet__select rs-input-unit">
+          <option value="1">B</option>
+          <option value="1024">KiB</option>
+          <option value="1048576" selected>MiB</option>
+          <option value="1073741824">GiB</option>
+        </select>
+      </span>
+    </label>
+    <label class="applet__field applet__field--wide">
+      <span>% shards lost: <span class="rs-loss-value">0</span>%</span>
+      <input type="range" class="applet__slider rs-input-loss" min="0" max="100" step="1" value="0">
+    </label>
+    <button type="button" class="applet__button rs-reroll-btn">Reroll</button>
+  </div>
+
+  <p class="applet__error rs-error" hidden></p>
+
+  <div class="applet__grid rs-grid" role="img" aria-label="Shard status grid"></div>
+
+  <dl class="applet__stats rs-stats">
+    <div><dt>Shard size</dt><dd class="rs-stat-shard-size">-</dd></div>
+    <div><dt>Padding</dt><dd class="rs-stat-padding">-</dd></div>
+    <div><dt>Transmitted size</dt><dd class="rs-stat-transmitted">-</dd></div>
+    <div><dt>Overhead</dt><dd class="rs-stat-overhead">-</dd></div>
+  </dl>
+
+  <div class="applet__verdict rs-verdict" data-state="pending">
+    <p class="applet__verdict-headline rs-verdict-headline">-</p>
+    <p class="applet__verdict-detail rs-verdict-detail"></p>
+  </div>
+</div>
+<script type="module" src="{{ get_url(path="js/apps/reed-solomon.js") }}"></script>

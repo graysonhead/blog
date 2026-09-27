@@ -93,7 +93,11 @@
     {% endif %}
 
 
-    {# TODO: custom css and js. #}
+    {# Page-scoped stylesheet for interactive applets. Set `[extra] applet = true` #}
+    {# in a page's front matter to opt in; keeps applets.css off pages that don't need it. #}
+    {% if page.extra.applet %}
+    <link rel="stylesheet" type="text/css" href="{{ get_url(path="css/applets.css") }}" />
+    {% endif %}
 
     {% if config.generate_feed %}
     <link rel="alternate" type="application/atom+xml" title="{{ config.title }} - Feed" href="{{ get_url(path="atom.xml") }}" />

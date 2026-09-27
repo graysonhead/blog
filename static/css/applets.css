@@ -1,0 +1,256 @@
+/*
+ * Shared styling for interactive applets embedded in posts.
+ *
+ * Convention: every applet's markup lives inside a root element with
+ * class="applet" and a data-applet="<name>" hook the applet's own JS
+ * uses to find itself. Shared structural classes are prefixed
+ * "applet__" and styled here; anything an individual applet's JS needs
+ * to hook into that isn't shared styling gets its own applet-local
+ * prefix (e.g. "rs-" for the reed-solomon applet) and stays unstyled
+ * from this file.
+ *
+ * This file is loaded only on pages that opt in via
+ * `[extra] applet = true` in front matter (see templates/partials/header.html),
+ * so it never affects pages without an applet on them.
+ *
+ * The site is permanently dark (config.extra.mode = "dark", no visitor
+ * toggle), so these colors are hardcoded for a dark background rather
+ * than built as light/dark variants.
+ */
+
+.applet {
+  --applet-bg: #26282c;
+  --applet-border: #3a3d42;
+  --applet-data-color: #6b6f76;
+  --applet-data-border: #8a8d93;
+  --applet-parity-color: #4a90d9;
+  --applet-parity-border: #2c5f8a;
+  --applet-lost-color: var(--maincolor);
+  --applet-lost-border: var(--darkMaincolor);
+  --applet-decodable-color: #3fb950;
+  --applet-not-decodable-color: #e5534b;
+  --applet-warn-color: #d4a72c;
+  --applet-text-dim: #aaa;
+
+  font-family: "Roboto Mono", monospace;
+  background: var(--applet-bg);
+  border: 1px solid var(--applet-border);
+  border-radius: 6px;
+  padding: 1.25rem;
+  margin: 1.5rem auto;
+  max-width: min(100%, 900px);
+}
+
+.applet__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+  margin-bottom: 1rem;
+}
+
+.applet__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--applet-text-dim);
+}
+
+.applet__field--wide {
+  flex: 1 1 100%;
+}
+
+.applet__field-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.applet__input,
+.applet__select {
+  background: #1b1c1f;
+  color: #fff;
+  border: 1px solid var(--applet-border);
+  border-radius: 4px;
+  padding: 0.3rem 0.5rem;
+  font-family: inherit;
+}
+
+.applet__slider {
+  width: 100%;
+  accent-color: var(--maincolor);
+}
+
+.applet__button {
+  background: var(--darkMaincolor);
+  color: #fff;
+  border: 1px solid var(--maincolor);
+  border-radius: 4px;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.applet__button:hover {
+  background: var(--maincolor);
+}
+
+.applet__button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.applet__error {
+  color: var(--applet-not-decodable-color);
+  font-size: 0.85rem;
+  margin: 0.5rem 0;
+}
+
+.applet__error[hidden] {
+  display: none;
+}
+
+.applet__grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin: 1rem 0;
+}
+
+.applet__grid-cell {
+  width: 30px;
+  height: 30px;
+  border-radius: 3px;
+  border: 2px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  color: #111;
+}
+
+/* Above 128 shards the full-size grid gets unwieldy, so the JS switches
+   the grid into this compact mode: smaller cells, no per-cell text
+   labels (identity is still available via the title tooltip on hover). */
+.applet__grid--compact {
+  gap: 2px;
+}
+
+.applet__grid--compact .applet__grid-cell {
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  border-width: 1px;
+  font-size: 0.55rem;
+}
+
+.applet__grid-cell--data {
+  background: var(--applet-data-color);
+  border-color: var(--applet-data-border);
+}
+
+.applet__grid-cell--parity {
+  background: var(--applet-parity-color);
+  border-color: var(--applet-parity-border);
+}
+
+.applet__grid-cell--lost {
+  background: var(--applet-lost-color);
+  border-color: var(--applet-lost-border);
+  color: #ddd;
+  opacity: 0.7;
+}
+
+.applet__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin: 1rem 0;
+  color: var(--applet-text-dim);
+}
+
+.applet__stats dt {
+  font-size: 0.75rem;
+}
+
+.applet__stats dd {
+  margin: 0;
+  color: #fff;
+  font-size: 1rem;
+}
+
+.applet__verdict {
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  border-left: 4px solid;
+  margin-top: 1rem;
+}
+
+.applet__verdict[data-state="decodable-concatenation"],
+.applet__verdict[data-state="decodable-reconstruction"] {
+  border-color: var(--applet-decodable-color);
+  background: rgba(63, 185, 80, 0.1);
+}
+
+.applet__verdict[data-state="not-decodable"] {
+  border-color: var(--applet-not-decodable-color);
+  background: rgba(229, 83, 75, 0.1);
+}
+
+.applet__verdict[data-state="invalid"],
+.applet__verdict[data-state="pending"] {
+  border-color: var(--applet-border);
+  background: transparent;
+}
+
+/* Overhead readout sits in the controls row alongside k/m, but (unlike
+   them) isn't editable, so it's styled as plain text rather than reusing
+   applet__input's boxed look. */
+.dp-stat-overhead {
+  color: #fff;
+  font-size: 1rem;
+  padding: 0.3rem 0;
+}
+
+/* delivery-probability applet: a plain data table, so it gets its own
+   dp- prefixed hooks per the file-header convention rather than reusing
+   the shard-grid's applet__ classes. */
+.dp-table-wrap {
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
+.dp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.dp-table th,
+.dp-table td {
+  padding: 0.4rem 0.9rem;
+  text-align: left;
+  border-bottom: 1px solid var(--applet-border);
+  white-space: nowrap;
+}
+
+.dp-table th {
+  color: var(--applet-text-dim);
+  font-weight: 600;
+}
+
+.dp-table td {
+  color: #fff;
+}
+
+.dp-table tr[data-tier="good"] td:nth-child(2) {
+  color: var(--applet-decodable-color);
+}
+
+.dp-table tr[data-tier="warn"] td:nth-child(2) {
+  color: var(--applet-warn-color);
+}
+
+.dp-table tr[data-tier="bad"] td:nth-child(2) {
+  color: var(--applet-not-decodable-color);
+}
