@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+
+    
+    <title>
+         Reliable Delivery Over Horrible Networks: Erasure Codes
+        
+    </title>
+
+    
+    <meta property="og:title"
+        content="Reliable Delivery Over Horrible Networks: Erasure Codes" />
+    
+    
+
+    
+    
+    
+
+    
+    
+    
+
+    
+
+    
+
+    
+
+    
+    
+    <script src=https://blog.graysonhead.net/js/feather.min.js></script>
+    
+
+
+    
+    <link href=https://blog.graysonhead.net/css/fonts.css rel="stylesheet" />
+    
+
+    <link rel="stylesheet" type="text/css" media="screen" href=https://blog.graysonhead.net/css/main.css />
+
+    
+    <link rel="stylesheet" id="darkModeStyle" type="text/css" href=https://blog.graysonhead.net/css/dark.css   />
+    
+
+
+    
+    
+    
+    <link rel="stylesheet" type="text/css" href="https://blog.graysonhead.net/css/applets.css" />
+    
+
+    
+    <link rel="alternate" type="application/atom+xml" title=" - Feed" href="https://blog.graysonhead.net/atom.xml" />
+    
+
+</head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-CCTJX63WS9"></script>
+<script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    gtag('js', new Date());
+
+    gtag('config', 'G-CCTJX63WS9');
+</script>
+
+<body>
+    <div class="content">
+        <header>
+    <div class="main" id="main_title">
+        <a href=https:&#x2F;&#x2F;blog.graysonhead.net></a>
+    </div>
+
+    <nav>
+        
+            <a href=&#x2F;posts>&#x2F;posts</a>
+        
+            <a href=&#x2F;projects>&#x2F;projects</a>
+        
+            <a href=&#x2F;about>&#x2F;about</a>
+        
+
+        
+            |
+
+            
+                <a href=&#x2F;>en</a>
+            
+        
+
+        
+
+        
+            | <a href="https://blog.graysonhead.net/atom.xml" title="Atom Feed"><i data-feather="rss"></i></a>
+        
+    </nav>
+</header>
+
+
+        
+    
+<main>
+    <article>
+        <div class="title">
+            <h1 class="title">Reliable Delivery Over Horrible Networks: Erasure Codes</h1>
+            <div class="meta">
+                
+                on  2026-09-27
+
+                
+            </div>
+        </div>
+
+        
+
+        <section class="body">
+            <p>As we explored in the <a href="https://blog.graysonhead.net/posts/reliable-delivery/">last post</a>, sending data over cruddy networks is a fun challenge. But frankly, those mechanisms were simple, primitive, and only applicable in a very narrow set of circumstances. Now we are going to explore reliable delivery, but with even more math!</p>
+<p>Let's say you need to deliver some big objects over a lossy, high latency pipe. As we previously explored, these suck. The combination of packet loss and high latencies makes any kind of retransmission scheme darn near impossible.</p>
+<p>But we can't use any clever tricks like shipping a buffer because the smallest message we want to send may be larger than our MTU. Sending by TCP may be impossible because TCP's response to steady packet loss is to just back-off until conditions improve.</p>
+<p>And bare UDP is no better. Sending via UDP (even repeatedly) will almost certainly fail because the datagram will be fragmented and the loss of any fragment will result in the datagram being un-constructable. Even at a low 1% packet loss, a datagram consisting of 10 fragments has a ~9.5% probability of experiencing a failure.</p>
+<p>So, we can't retransmit, and we can't spam the message. What can we do? We need a mechanism that will ensure the other side gets enough pieces to reconstruct the message. But just duplicating each chunk would be terribly inefficient.</p>
+<p>Fortunately, there are several ways we can (within reason) guarantee the other side gets the message despite a terrible connection. In this post, we are going to look at one of the more common ones.</p>
+<h2 id="reed-solomon-codes">Reed-Solomon Codes</h2>
+<p>Reed-Solomon erasure codes (more formally known as Reed-Solomon error correction) are a group of error-correcting algorithms devised by Irving S. Reed and Gustave Solomon in 1960. They became quite ubiquitous, found in everything from hyperscale distributed storage systems to CDs and DVDs, as well as in a lot of prior art in network and radio transmission systems such as WiMAX and the venerable RAID 6.</p>
+<p>What Reed-Solomon does is allow you to break your data down into an arbitrary number of <code>k + m</code> shards, where <code>k</code> are equal chunks of the original message, and <code>m</code> are parity shards of equal size. Any <code>k</code> number of shards (regardless of whether they are the original data, or parity) are sufficient to decode the original message. Assembling all of the <code>k</code> shards is less CPU intensive, though, since you simply concatenate them together.</p>
+<p>So, you split your bytes up into shards (parity and data), and then transmit those shards individually instead of your original object. If enough of them make it to the other side, the original bytes can be decoded on the other side.</p>
+<p>Play around with the calculator below to see how much shard/packet loss different <code>k</code> and <code>m</code> values will tolerate.</p>
+<div class="applet" data-applet="reed-solomon">
+  <div class="applet__controls">
+    <label class="applet__field">
+      <span>k (data shards)</span>
+      <input type="number" class="applet__input rs-input-k" min="1" step="1" inputmode="numeric">
+    </label>
+    <label class="applet__field">
+      <span>m (parity shards)</span>
+      <input type="number" class="applet__input rs-input-m" min="0" step="1" inputmode="numeric">
+    </label>
+    <label class="applet__field">
+      <span>Object size</span>
+      <span class="applet__field-row">
+        <input type="number" class="applet__input rs-input-size" min="0" step="any">
+        <select class="applet__select rs-input-unit">
+          <option value="1">B</option>
+          <option value="1024">KiB</option>
+          <option value="1048576" selected>MiB</option>
+          <option value="1073741824">GiB</option>
+        </select>
+      </span>
+    </label>
+    <label class="applet__field applet__field--wide">
+      <span>% shards lost: <span class="rs-loss-value">0</span>%</span>
+      <input type="range" class="applet__slider rs-input-loss" min="0" max="100" step="1" value="0">
+    </label>
+    <button type="button" class="applet__button rs-reroll-btn">Reroll</button>
+  </div>
+
+  <p class="applet__error rs-error" hidden></p>
+
+  <div class="applet__grid rs-grid" role="img" aria-label="Shard status grid"></div>
+
+  <dl class="applet__stats rs-stats">
+    <div><dt>Shard size</dt><dd class="rs-stat-shard-size">-</dd></div>
+    <div><dt>Padding</dt><dd class="rs-stat-padding">-</dd></div>
+    <div><dt>Transmitted size</dt><dd class="rs-stat-transmitted">-</dd></div>
+    <div><dt>Overhead</dt><dd class="rs-stat-overhead">-</dd></div>
+  </dl>
+
+  <div class="applet__verdict rs-verdict" data-state="pending">
+    <p class="applet__verdict-headline rs-verdict-headline">-</p>
+    <p class="applet__verdict-detail rs-verdict-detail"></p>
+  </div>
+</div>
+<script type="module" src="https://blog.graysonhead.net/js/apps/reed-solomon.js"></script>
+<h2 id="simple-reed-solomon-erasure-coded-protocol">Simple Reed-Solomon Erasure Coded Protocol</h2>
+<p>So how do we actually go about using this? Quite simply as it turns out. Let's take a look at an example:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">use </span><span>parity_scale_codec::{Decode, DecodeAll, Encode};
+</span><span>
+</span><span style="color:#65737e;">/// Conservative shard payload ceiling: MTU (1500) minus IPv4 (20) + UDP (8) + worst-case
+</span><span style="color:#65737e;">/// protocol header overhead.
+</span><span style="color:#b48ead;">pub const </span><span style="color:#d08770;">MAX_SHARD_SIZE</span><span>: </span><span style="color:#b48ead;">usize </span><span>= </span><span style="color:#d08770;">1400</span><span>;
+</span><span>
+</span><span style="color:#65737e;">/// Maximum total shards per block (n_data + n_parity).
+</span><span style="color:#65737e;">/// Fits in a u64 bitmask; sufficient for any practical RS configuration.
+</span><span style="color:#b48ead;">pub const </span><span style="color:#d08770;">MAX_TOTAL_SHARDS</span><span>: </span><span style="color:#b48ead;">usize </span><span>= </span><span style="color:#d08770;">64</span><span>;
+</span><span>
+</span><span style="color:#65737e;">/// Opaque monotonically-increasing identifier for a group of shards encoded together.
+</span><span style="color:#b48ead;">pub type </span><span>BlockId = </span><span style="color:#b48ead;">u32</span><span>;
+</span><span>
+</span><span style="color:#65737e;">/// A single data or parity shard, carried in one UDP datagram.
+</span><span style="color:#65737e;">///
+</span><span style="color:#65737e;">/// Reed-Solomon requires all shards in a block to be the same byte length. The sender
+</span><span style="color:#65737e;">/// zero-pads the last data shard to reach that length; `original_len` lets the receiver
+</span><span style="color:#65737e;">/// strip the padding after reconstruction.
+</span><span style="color:#65737e;">///
+</span><span style="color:#65737e;">/// Shard indices are divided as follows within each block:
+</span><span style="color:#65737e;">///   `[0, n_data)`              → data shards (original payload, possibly padded)
+</span><span style="color:#65737e;">///   `[n_data, n_data+n_parity)` → parity shards (repair symbols)
+</span><span style="color:#65737e;">///
+</span><span style="color:#65737e;">/// Any `n_data` shards out of the `n_data + n_parity` total are sufficient to
+</span><span style="color:#65737e;">/// reconstruct the block.
+</span><span>#[</span><span style="color:#bf616a;">derive</span><span>(Debug, Clone, PartialEq, Encode, Decode)]
+</span><span style="color:#b48ead;">pub struct </span><span>ShardPacket {
+</span><span>    </span><span style="color:#65737e;">/// Block this shard belongs to.
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">block_id</span><span>: BlockId,
+</span><span>    </span><span style="color:#65737e;">/// Position within the block: data shards first, then parity.
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">shard_index</span><span>: </span><span style="color:#b48ead;">u8</span><span>,
+</span><span>    </span><span style="color:#65737e;">/// k: number of data shards. Receiver needs any k shards to reconstruct.
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">n_data</span><span>: </span><span style="color:#b48ead;">u8</span><span>,
+</span><span>    </span><span style="color:#65737e;">/// m: number of parity (repair) shards. Surviving up to m losses is guaranteed.
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">n_parity</span><span>: </span><span style="color:#b48ead;">u8</span><span>,
+</span><span>    </span><span style="color:#65737e;">/// Byte length of the original un-padded block data.
+</span><span>    </span><span style="color:#65737e;">/// Used to trim the recovered payload after decoding.
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">original_len</span><span>: </span><span style="color:#b48ead;">u32</span><span>,
+</span><span>    </span><span style="color:#65737e;">/// Shard bytes. Every shard in the same block has identical length.
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">payload</span><span>: Vec&lt;</span><span style="color:#b48ead;">u8</span><span>&gt;,
+</span><span>}
+</span><span>
+</span><span style="color:#65737e;">/// Sent by the receiver to confirm that a block was successfully decoded.
+</span><span>#[</span><span style="color:#bf616a;">derive</span><span>(Debug, Clone, PartialEq, Encode, Decode)]
+</span><span style="color:#b48ead;">pub struct </span><span>BlockAck {
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">block_id</span><span>: BlockId,
+</span><span>}
+</span></code></pre>
+<p>Here are some of our basic messages. The <code>ShardPacket</code> is the main message that is going to do our heavy lifting. It has a block_id, which allows for multiplexing and interleaving of sends (as the receiver can tell packets for different objects apart), and a shard_index, which tells the receiver what position to place this packet in the decoder.</p>
+<p>We also include three items of metadata: the number of data shards, the number of parity shards, and the original length of the object. Since this is a protocol designed to tolerate loss, we don't know which of our packets will actually get to the host, so doing some kind of handshake at the start of each object send wouldn't be wise. If we are using a code with <code>m:20</code>, we could lose the first 20 packets and still be able to decode the object in the end. So the small (6 byte) overhead is well worth it.</p>
+<p>For the return path, upon successfully decoding an object, the receiver will return a <code>BlockAck</code> with the block_id that was decoded.</p>
+<p>As for the actual encoding of blocks, the Rust crate I used for this example makes this very easy:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#b48ead;">use </span><span>reed_solomon_erasure::galois_8::ReedSolomon;
+</span><span>
+</span><span style="color:#b48ead;">use super</span><span>::types::{BlockId, ShardPacket, </span><span style="color:#d08770;">MAX_TOTAL_SHARDS</span><span>};
+</span><span>
+</span><span style="color:#65737e;">/// Encode `data` into `n_data + n_parity` [`ShardPacket`]s for a single block.
+</span><span style="color:#65737e;">///
+</span><span style="color:#65737e;">/// All shards are the same byte length.  The last data shard is zero-padded if
+</span><span style="color:#65737e;">/// `data.len()` is not an exact multiple of `n_data`; `original_len` in every
+</span><span style="color:#65737e;">/// packet carries the true length so the receiver can strip the padding.
+</span><span style="color:#b48ead;">pub fn </span><span style="color:#8fa1b3;">encode_block</span><span>(
+</span><span>    </span><span style="color:#bf616a;">data</span><span>: &amp;[</span><span style="color:#b48ead;">u8</span><span>],
+</span><span>    </span><span style="color:#bf616a;">block_id</span><span>: BlockId,
+</span><span>    </span><span style="color:#bf616a;">n_data</span><span>: </span><span style="color:#b48ead;">u8</span><span>,
+</span><span>    </span><span style="color:#bf616a;">n_parity</span><span>: </span><span style="color:#b48ead;">u8</span><span>,
+</span><span>) -&gt; anyhow::Result&lt;Vec&lt;ShardPacket&gt;&gt; {
+</span><span>    anyhow::ensure!(n_data &gt;= </span><span style="color:#d08770;">1</span><span>, &quot;</span><span style="color:#a3be8c;">n_data must be &gt;= 1</span><span>&quot;);
+</span><span>    anyhow::ensure!(n_parity &gt;= </span><span style="color:#d08770;">1</span><span>, &quot;</span><span style="color:#a3be8c;">n_parity must be &gt;= 1</span><span>&quot;);
+</span><span>    anyhow::ensure!(
+</span><span>        n_data as </span><span style="color:#b48ead;">usize </span><span>+ n_parity as </span><span style="color:#b48ead;">usize </span><span>&lt;= </span><span style="color:#d08770;">MAX_TOTAL_SHARDS</span><span>,
+</span><span>        &quot;</span><span style="color:#a3be8c;">n_data ({n_data}) + n_parity ({n_parity}) exceeds MAX_TOTAL_SHARDS ({MAX_TOTAL_SHARDS})</span><span>&quot;
+</span><span>    );
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">let</span><span> k = n_data as </span><span style="color:#b48ead;">usize</span><span>;
+</span><span>    </span><span style="color:#b48ead;">let</span><span> m = n_parity as </span><span style="color:#b48ead;">usize</span><span>;
+</span><span>    </span><span style="color:#b48ead;">let</span><span> original_len = data.</span><span style="color:#96b5b4;">len</span><span>() as </span><span style="color:#b48ead;">u32</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// Shard size: ceiling division, minimum 1 to avoid zero-length shards.
+</span><span>    </span><span style="color:#b48ead;">let</span><span> shard_size = ((data.</span><span style="color:#96b5b4;">len</span><span>() + k - </span><span style="color:#d08770;">1</span><span>) / k).</span><span style="color:#96b5b4;">max</span><span>(</span><span style="color:#d08770;">1</span><span>);
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// Pad data to exactly k * shard_size bytes.
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> padded = data.</span><span style="color:#96b5b4;">to_vec</span><span>();
+</span><span>    padded.</span><span style="color:#96b5b4;">resize</span><span>(k * shard_size, </span><span style="color:#d08770;">0</span><span>);
+</span><span>
+</span><span>    </span><span style="color:#65737e;">// Build the shard vec: k data shards followed by m zeroed parity slots.
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> shards: Vec&lt;Vec&lt;</span><span style="color:#b48ead;">u8</span><span>&gt;&gt; = padded.</span><span style="color:#96b5b4;">chunks</span><span>(shard_size).</span><span style="color:#96b5b4;">map</span><span>(&lt;[</span><span style="color:#b48ead;">u8</span><span>]&gt;::to_vec).</span><span style="color:#96b5b4;">collect</span><span>();
+</span><span>    shards.</span><span style="color:#96b5b4;">extend</span><span>((</span><span style="color:#d08770;">0</span><span>..m).</span><span style="color:#96b5b4;">map</span><span>(|_| vec![</span><span style="color:#d08770;">0</span><span style="color:#b48ead;">u8</span><span>; shard_size]));
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">let</span><span> rs = ReedSolomon::new(k, m)
+</span><span>        .</span><span style="color:#96b5b4;">map_err</span><span>(|</span><span style="color:#bf616a;">e</span><span>| anyhow::anyhow!(&quot;</span><span style="color:#a3be8c;">ReedSolomon::new failed: {e:?}</span><span>&quot;))?;
+</span><span>    rs.</span><span style="color:#96b5b4;">encode</span><span>(&amp;</span><span style="color:#b48ead;">mut</span><span> shards)
+</span><span>        .</span><span style="color:#96b5b4;">map_err</span><span>(|</span><span style="color:#bf616a;">e</span><span>| anyhow::anyhow!(&quot;</span><span style="color:#a3be8c;">encode failed: {e:?}</span><span>&quot;))?;
+</span><span>
+</span><span>    Ok(shards
+</span><span>        .</span><span style="color:#96b5b4;">into_iter</span><span>()
+</span><span>        .</span><span style="color:#96b5b4;">enumerate</span><span>()
+</span><span>        .</span><span style="color:#96b5b4;">map</span><span>(|(</span><span style="color:#bf616a;">i</span><span>, </span><span style="color:#bf616a;">payload</span><span>)| ShardPacket {
+</span><span>            block_id,
+</span><span>            shard_index: i as </span><span style="color:#b48ead;">u8</span><span>,
+</span><span>            n_data,
+</span><span>            n_parity,
+</span><span>            original_len,
+</span><span>            payload,
+</span><span>        })
+</span><span>        .</span><span style="color:#96b5b4;">collect</span><span>())
+</span><span>}
+</span></code></pre>
+<p>Sizing your receive and retransmission buffers means balancing memory usage against how many blocks you're willing to have in flight at once, since both sender and receiver need enough room to hold them. The good news is that the FEC overhead doesn't inflate that math: you only ever need to hold one object's worth of data in the receive buffer, because as soon as the last piece needed to decode it arrives, any leftover shards for that object can be dropped. So you can still size your buffers to roughly your bandwidth delay product, protocol overhead aside.</p>
+<p>Another thing worth mentioning is that it does take more CPU to reconstruct objects from parity than it does to simply concatenate all the data blocks together, so I would definitely ensure that your protocol sends all of the data blocks first. On a healthy connection, this will reduce CPU usage on the receiver.</p>
+<p>With all of this, we have a pretty good delivery system that passively tolerates some loss. But for a truly reliable program, that isn't enough, and we still need a back-up system.</p>
+<h2 id="retransmission">Retransmission</h2>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#65737e;">/// Sent by the receiver when a block cannot yet be recovered (timeout before n_data shards arrived).
+</span><span style="color:#65737e;">///
+</span><span style="color:#65737e;">/// The sender uses `received_mask` for selective retransmit: only missing shards are resent.
+</span><span>#[</span><span style="color:#bf616a;">derive</span><span>(Debug, Clone, PartialEq, Encode, Decode)]
+</span><span style="color:#b48ead;">pub struct </span><span>BlockNack {
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">block_id</span><span>: BlockId,
+</span><span>    </span><span style="color:#65737e;">/// Bitmask of received shards: bit i is set iff shard_index i arrived.
+</span><span>    </span><span style="color:#65737e;">/// Bit width is sufficient for n_total ≤ MAX_TOTAL_SHARDS.
+</span><span>    </span><span style="color:#b48ead;">pub </span><span style="color:#bf616a;">received_mask</span><span>: </span><span style="color:#b48ead;">u64</span><span>,
+</span><span>}
+</span></code></pre>
+<p>After seeing the first packet for a given <code>block_id</code>, the receiver will start emitting <code>BlockNacks</code> if it cannot decode the block within a given timeout. And in this packet, quite a bit is communicated in a very small number of bytes.</p>
+<p>The <code>block_id</code> is the same as above, but the <code>received_mask</code> is quite interesting. It's a bitmask of each shard. From this one integer, the sender can derive exactly which parity/data shards it needs to resend from the retransmit buffer:</p>
+<p>As a small example, say <code>n_data = 4</code> and <code>n_parity = 2</code> (6 shards total), and the receiver only got shards 0, 2, and 4 before giving up and sending a <code>BlockNack</code>:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>shard_index:  0  1  2  3  4  5
+</span><span>              └── data ──┘└parity┘
+</span><span>arrived?      ✓  ✗  ✓  ✗  ✓  ✗
+</span><span>mask bit:     1  0  1  0  1  0
+</span></code></pre>
+<p>Read as an integer, those bits are <code>received_mask = 0b010101</code> (<code>0x15</code>, 21 decimal). The sender doesn't have to guess or ask which shards are missing. It just scans the mask for <code>0</code> bits and resends exactly those: shard 1 and shard 3 (data), and shard 5 (parity).</p>
+<p>And this allows for another neat trick as well: the sender can measure packet loss in one direction without sequence numbers or any other fancy analytical machinery. This can even be used as a feedback mechanism for the sender to dynamically adjust its coding rate (<code>k + m</code>)!</p>
+<h2 id="dynamic-m">Dynamic M</h2>
+<p>It's important to understand that the superpower of an FEC scheme is not in its retransmission mechanism, however efficient that might be. Using Reed-Solomon codes to send traffic in the first place incurs overhead, so in order to make the trade-off in overhead worth it, you should make sure that your delivery has a high chance of succeeding on the first try. The best way to do this is to make your protocol aware of the current link conditions and have it dynamically select <code>m</code> based on that.</p>
+<p>To see why that matters, it helps to look past a single roll of the dice and ask: across a whole spread of packet loss rates, what's the actual probability that a block gets through on the first try for a given <code>k + m</code>? Set <code>k</code> and <code>m</code> below and the table works out <code>P(success)</code> (and its complement) at each loss rate exactly:</p>
+<div class="applet" data-applet="delivery-probability">
+  <div class="applet__controls">
+    <label class="applet__field">
+      <span>k (data shards)</span>
+      <input type="number" class="applet__input dp-input-k" min="1" step="1" inputmode="numeric">
+    </label>
+    <label class="applet__field">
+      <span>m (parity shards)</span>
+      <input type="number" class="applet__input dp-input-m" min="0" step="1" inputmode="numeric">
+    </label>
+    <div class="applet__field">
+      <span>Overhead</span>
+      <span class="dp-stat-overhead">-</span>
+    </div>
+  </div>
+
+  <p class="applet__error dp-error" hidden></p>
+
+  <div class="dp-table-wrap">
+    <table class="dp-table">
+      <thead>
+        <tr>
+          <th>Packet loss</th>
+          <th>P(successful delivery)</th>
+          <th>P(failure)</th>
+          <th>1 lost block every...</th>
+        </tr>
+      </thead>
+      <tbody class="dp-table-body"></tbody>
+    </table>
+  </div>
+</div>
+<script type="module" src="https://blog.graysonhead.net/js/apps/delivery-probability.js"></script>
+<p>Notice how a fixed coding rate can go from comfortably safe to essentially guaranteed failure over a fairly narrow band of loss rates. That's the argument for measuring current conditions and feeding them back into <code>m</code>, rather than picking one static value and hoping it holds.</p>
+<h2 id="the-ack-problem">The Ack Problem</h2>
+<p>But if you implemented this protocol exactly as described, it wouldn't work well in practice. Data flows cleanly from sender to receiver, and assuming you can tolerate the overhead, you can transfer a considerable amount of data over pretty terrible connections. The problem is that acks and nacks travel over the same lossy link that made you reach for FEC in the first place, so the sender ends up not clearing its retransmission buffer fast enough. On a <code>10 + 10</code> code over a connection with 20% packet loss, delivery of objects is virtually guaranteed, but you'll still wind up retransmitting (or stalling on) 20% of your objects anyway, simply because 20% of the receiver's acks never made it back.</p>
+<p>The naive solution is to simply code the acks as well, but an ack is an extremely small message, and nacks aren't much larger. If you remember the <a href="https://blog.graysonhead.net/posts/reliable-delivery/">previous post</a>, this follows a pattern that our previous &quot;Ring Buffer&quot; reliability protocol solves very well. So one solution is to keep a ring buffer of acks, and transmit the last several acks along with every new ack. That way, on a channel with steady-state transmissions, the acks will also gain a level of reliability.</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#65737e;">/// Owns the outgoing ACK ring buffer.
+</span><span>async </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">ack_sender_task</span><span>(
+</span><span>    </span><span style="color:#b48ead;">mut </span><span style="color:#bf616a;">cmd_rx</span><span>: mpsc::Receiver&lt;AckCmd&gt;,
+</span><span>    </span><span style="color:#bf616a;">sock</span><span>: Arc&lt;UdpSocket&gt;,
+</span><span>    </span><span style="color:#bf616a;">peer_addr</span><span>: SocketAddr,
+</span><span>    </span><span style="color:#bf616a;">n_data</span><span>: </span><span style="color:#b48ead;">u8</span><span>,
+</span><span>    </span><span style="color:#bf616a;">n_parity</span><span>: </span><span style="color:#b48ead;">u8</span><span>,
+</span><span>) {
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> ring: VecDeque&lt;BlockAck&gt; = VecDeque::new();
+</span><span>    </span><span style="color:#b48ead;">let mut</span><span> batch_id: </span><span style="color:#b48ead;">u32 </span><span>= </span><span style="color:#d08770;">0</span><span>;
+</span><span>
+</span><span>    </span><span style="color:#b48ead;">while let </span><span>Some(AckCmd::Decoded(block_id)) = cmd_rx.</span><span style="color:#96b5b4;">recv</span><span>().await {
+</span><span>        ring.</span><span style="color:#96b5b4;">push_back</span><span>(BlockAck { block_id });
+</span><span>        </span><span style="color:#96b5b4;">trim_to_mtu</span><span>(&amp;</span><span style="color:#b48ead;">mut</span><span> ring);
+</span><span>        batch_id = batch_id.</span><span style="color:#96b5b4;">wrapping_add</span><span>(</span><span style="color:#d08770;">1</span><span>);
+</span><span>        </span><span style="color:#96b5b4;">send_ack_batch</span><span>(&amp;ring, &amp;sock, peer_addr, batch_id, n_data, n_parity).await;
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>Every new decode appends to the ring and resends the whole thing, so any single ack getting through carries several of its predecessors along with it. In practice you'll also want to resend the ring on a timer during idle periods (so it drains even if no new blocks arrive) and cap how many times you burst-resend after a decode, but that's just scheduling logic layered on top of this same core loop.</p>
+<p>And this is probably pretty reliable by itself. But now, we have turned a bunch of small acks back into a large object. If we have extra bandwidth to spend, we can also just FEC encode the ring buffer full of acks as well:</p>
+<pre data-lang="rust" style="background-color:#2b303b;color:#c0c5ce;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#65737e;">/// FEC-encode the ACK ring and send each shard as `Packet::AckShard`.
+</span><span style="color:#65737e;">/// The sender accumulates shards by `batch_id` and decodes when n_data arrive,
+</span><span style="color:#65737e;">/// gaining the same loss protection as data shards at the same overhead.
+</span><span>async </span><span style="color:#b48ead;">fn </span><span style="color:#8fa1b3;">send_ack_batch</span><span>(
+</span><span>    </span><span style="color:#bf616a;">ring</span><span>: &amp;VecDeque&lt;BlockAck&gt;,
+</span><span>    </span><span style="color:#bf616a;">sock</span><span>: &amp;UdpSocket,
+</span><span>    </span><span style="color:#bf616a;">peer_addr</span><span>: SocketAddr,
+</span><span>    </span><span style="color:#bf616a;">batch_id</span><span>: </span><span style="color:#b48ead;">u32</span><span>,
+</span><span>    </span><span style="color:#bf616a;">n_data</span><span>: </span><span style="color:#b48ead;">u8</span><span>,
+</span><span>    </span><span style="color:#bf616a;">n_parity</span><span>: </span><span style="color:#b48ead;">u8</span><span>,
+</span><span>) {
+</span><span>    </span><span style="color:#b48ead;">let</span><span> acks: Vec&lt;BlockAck&gt; = ring.</span><span style="color:#96b5b4;">iter</span><span>().</span><span style="color:#96b5b4;">cloned</span><span>().</span><span style="color:#96b5b4;">collect</span><span>();
+</span><span>    </span><span style="color:#b48ead;">let</span><span> payload = </span><span style="color:#96b5b4;">encode_ack_batch</span><span>(&amp;acks);
+</span><span>    </span><span style="color:#b48ead;">if let </span><span>Ok(shards) = </span><span style="color:#96b5b4;">encode_block</span><span>(&amp;payload, batch_id, n_data, n_parity) {
+</span><span>        </span><span style="color:#b48ead;">for</span><span> shard in shards {
+</span><span>            </span><span style="color:#b48ead;">let</span><span> bytes = Packet::AckShard(shard).</span><span style="color:#96b5b4;">encode_to_vec</span><span>();
+</span><span>            </span><span style="color:#b48ead;">let </span><span>_ = sock.</span><span style="color:#96b5b4;">send_to</span><span>(&amp;bytes, peer_addr).await;
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>And while this does add overhead, the acks...again...are tiny. There are lots of tradeoffs here, which result in a lot of knobs to turn, but if you have constant steady-state packet loss and you want your buffers as close to the bandwidth delay product as possible, spending a comparatively small amount of overhead on making your ack delivery more reliable is probably worth it.</p>
+<h2 id="erasure-coding-in-practice">Erasure Coding In Practice</h2>
+<p>Practically speaking, the theory applies very well in practice. At least, so long as you test with tools that assume each packet has an independent probability of being lost (we will explore a more realistic loss profile and what you can do about it in a future article).</p>
+<p>For instance, at <code>k=10 m=8</code> with 10% packet loss, theory predicts a lost block roughly once every 47,900:</p>
+<img src="../../images/reliable_delivery_2/fec_1.png" alt="Graph showing FEC throughput at k=10 m=8 with 10% loss, holding steady around 0.7 Mbps with zero retransmits" />
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>--- Summary ---
+</span><span>Loss rate:             10.0%
+</span><span>RTT (final est.):    102.96ms
+</span><span>Blocks pushed:          4000
+</span><span>Blocks delivered:       4000
+</span><span>Shard retransmits:         0
+</span><span>  via NACK:                0
+</span><span>  via RTO:                 0  (0 full-block events)
+</span></code></pre>
+<p>As expected, we don't even trigger the retransmission mechanism at 10% loss: all blocks were decoded on the first attempt.</p>
+<p>At 15% packet loss, however, probability says we should fail to decode a block every 1,960:</p>
+<img src="../../images/reliable_delivery_2/fec_2.png" alt="Graph showing FEC throughput at k=10 m=8 with 15% loss, holding steady around 0.7 Mbps with a couple of small retransmit spikes" />
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>--- Summary ---
+</span><span>Loss rate:             15.0%
+</span><span>RTT (final est.):    103.29ms
+</span><span>Blocks pushed:          2000
+</span><span>Blocks delivered:       2000
+</span><span>Shard retransmits:        45
+</span><span>  via NACK:                9
+</span><span>  via RTO:                36  (2 full-block events)
+</span></code></pre>
+<p>Theory predicted roughly one block would fail to decode outright (which requires losing 9 or more of the 18 shards, one past what <code>m=8</code> parity can cover), and in practice we ended up retransmitting 9 shards via the NACK path to recover it. On the other hand, we retransmitted 36 via RTO, but those are due to losses of acks. So the test very closely matches the theory.</p>
+<p>For an extreme example:</p>
+<p>90% loss rate, 100ms RTT, small window and bandwidth-limited connection:</p>
+<img src="../../images/reliable_delivery_2/extreme_1.png" alt="Graph showing FEC throughput at k=1 m=63 with 90% loss and a 10 Mbps bandwidth cap, holding around 0.08 Mbps of delivered throughput despite spending nearly 5 Mbps on shards" />
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>--- Summary ---
+</span><span>Loss rate:             90.0%
+</span><span>RTT (final est.):    112.56ms
+</span><span>Blocks pushed:           100
+</span><span>Blocks delivered:        100
+</span><span>Shard retransmits:         0
+</span><span>  via NACK:                0
+</span><span>  via RTO:                 0  (0 full-block events)
+</span></code></pre>
+<p>We shrunk the 10 Mbps pipe down to a measly 79 kbps one, but passively delivering <em>anything</em> without retransmissions against 90% packet loss is no joke.</p>
+<p>I think the most common use case for this, though, is to just pave over the first 1-3% packet loss that would result in you losing more than 2/3rds of your TCP bandwidth. For example, this clearly shows the 40% overhead you pay for running <code>k=10 m=4</code>, but pretty much all your deliveries make it the first time:</p>
+<img src="../../images/reliable_delivery_2/fec_3.png" alt="Graph showing FEC throughput at k=10 m=4 with 2% loss, delivering around 95 Mbps steadily against about 135 Mbps of raw bandwidth spent, with retransmits dropping to zero after a brief initial spike" />
+<p>And, if you remember from the previous article, the usable bandwidth of a lossy TCP stream drops severely with latency. That's not a buffer size problem; bigger send/receive windows won't fix it. It's because congestion control only grows the congestion window by about one segment per round trip, so after a loss event, recovering back to full speed takes wall-clock time proportional to RTT. This scheme doesn't have a congestion window to collapse and slowly climb back from, so as long as you don't fill the send window, latency alone doesn't cost you <em>any</em> throughput:</p>
+<img src="../../images/reliable_delivery_2/fec_4.png" alt="Graph showing FEC throughput at k=10 m=4 with 2% loss and rtt:20ms, holding around 94 Mbps of throughput with zero retransmits, essentially unchanged from the 2ms RTT case" />
+<h2 id="wrapping-up">Wrapping Up</h2>
+<p>Reed-Solomon FEC gives you the option to trade off reliability for overhead. Instead of chasing dropped packets after the fact, you spend a bit of bandwidth up front so that most blocks arrive complete on the first try, even over links that are dropping a meaningful fraction of everything you send.
+<br>
+It's also worth remembering that everything above pairs FEC with a retransmission mechanism, but that's not a requirement. Plenty of use cases just run FEC on its own at a fixed coding rate and accept the residual failure probability, skipping acks and retransmission buffers entirely.</p>
+<p>Perhaps the most important thing to realize is that this isn't strictly better than a pure retransmission-based reliable protocol such as TCP. As elegant a solution as erasure codes are, they're inefficient: both ends burn CPU cycles doing encodes and decodes<sup class="footnote-reference"><a href="#1">1</a></sup>, and the sender <em>always</em> transmits more data than it strictly needs to. TCP, by contrast, transmits exactly as much data as is required and no more.</p>
+<p>There's a second cost too: since there's no congestion control backing any of this off, a stream like this will happily fill 100% of its allotted bandwidth regardless of what else is sharing the link. It isn't a great neighbor on a connection anyone else is using, and it won't back off the way TCP will if something else needs the room.</p>
+<p>But in two situations, retransmission-based protocols like TCP and QUIC are not ideal, and a scheme like this is far better:</p>
+<p>The first is high-latency links. If you have a 300ms RTT, every failed delivery is going to take 300ms to resolve <em>in the ideal case</em>. More likely, the failures will stack on top of each other, and seconds will go by before delivery finally goes through. In the case of TCP, this means that for that period of time, no new data is going to make it to the other end either.</p>
+<p>And second, there are cases where regular packet loss is expected. If you have a constant 1-2% packet loss, <code>k=10 m=4</code> virtually guarantees delivery in exchange for 40% overhead. 40% may sound like a lot, but when you consider that a 200 Mbps link with 1% packet loss, as utilized by TCP, will be capable of delivering about 40 Mbps, it starts sounding a lot better. That is an 80% reduction in bandwidth versus 40% overhead. And the higher packet loss gets, the more this trade works out in favor of passive FEC.</p>
+<p>And bear in mind, if you do want a dynamic <code>m</code> determined by current link conditions, the state machine required on both sides of the connection is rather complex. Totally tractable, but definitely not as trivial as I've hand-waved it here.</p>
+<p>And it's also important to mention that the testing here doesn't reflect the real world, because packet loss is not per-packet independent. For Reed-Solomon, this is actually not as big of a deal on a packet-by-packet basis: it doesn't matter which of the blocks you lose, so long as you don't lose <code>m</code> of them. But once you start multiplexing objects, short periods of loss will result in either losing blocks (or triggering your retransmission mechanism) even if your coding rate is high enough to absorb the packet loss averaged over some period of time.</p>
+<p>And, of course, there are also solutions for that. But we will have to talk about those next time.</p>
+<br>
+<br>
+<br>
+<br>
+<br>
+<div class="footnote-definition" id="1"><sup class="footnote-definition-label">1</sup>
+<p>And until recently, CPUs were not great at doing multiplication and division in a Galois field, which made this significantly worse.</p>
+</div>
+
+        </section>
+
+        
+            <div class="post-tags">
+                <nav class="nav tags">
+                    <ul class="tags">
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/networking/>Networking</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/rust/>Rust</a></li>
+                        
+                            <li><a href=https://blog.graysonhead.net/tags/netcode/>netcode</a></li>
+                        
+                    </ul>
+                </nav>
+            </div>
+        
+
+    </article>
+</main>
+
+
+
+        <footer>
+	<div style="display:flex">
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;github.com&#x2F;graysonhead title=GitHub>
+	         <i data-feather=github></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;hachyderm.io&#x2F;@Darkside title=Mastadon>
+	         <i data-feather=globe></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;www.linkedin.com&#x2F;in&#x2F;graysonhead&#x2F; title=LinkedIn>
+	         <i data-feather=linkedin></i>
+	     </a>
+	 
+	     <a class="soc" href=https:&#x2F;&#x2F;pixel.tchncs.de&#x2F;i&#x2F;web title=PixelFed>
+	         <i data-feather=camera></i>
+	     </a>
+	 
+	 </div>
+	 <div class="footer-info">
+	 2026 © Grayson Head
+        </div>
+</footer>
+
+
+<script>
+	    feather.replace();
+</script>
+
+
+    </div>
+</body>
+
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "gravity-wasm",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "gravity_wasm_bg.wasm",
+    "gravity_wasm.js",
+    "gravity_wasm.d.ts"
+  ],
+  "main": "gravity_wasm.js",
+  "types": "gravity_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

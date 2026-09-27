@@ -1,0 +1,631 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <title> - netcode</title>
+    <link href="https://blog.graysonhead.net/tags/netcode/atom.xml" rel="self" type="application/atom+xml"/>
+    <link href="https://blog.graysonhead.net"/>
+    <generator uri="https://www.getzola.org/">Zola</generator>
+    <updated>2026-09-27T00:00:00+00:00</updated>
+    <id>https://blog.graysonhead.net/tags/netcode/atom.xml</id>
+    <entry xml:lang="en">
+        <title>Reliable Delivery Over Horrible Networks: Erasure Codes</title>
+        <published>2026-09-27T00:00:00+00:00</published>
+        <updated>2026-09-27T00:00:00+00:00</updated>
+        <author>
+          <name>Unknown</name>
+        </author>
+        <link rel="alternate" href="https://blog.graysonhead.net/posts/reliable-delivery-part-2/" type="text/html"/>
+        <id>https://blog.graysonhead.net/posts/reliable-delivery-part-2/</id>
+        
+        <content type="html">&lt;p&gt;As we explored in the &lt;a href=&quot;https:&#x2F;&#x2F;blog.graysonhead.net&#x2F;posts&#x2F;reliable-delivery&#x2F;&quot;&gt;last post&lt;&#x2F;a&gt;, sending data over cruddy networks is a fun challenge. But frankly, those mechanisms were simple, primitive, and only applicable in a very narrow set of circumstances. Now we are going to explore reliable delivery, but with even more math!&lt;&#x2F;p&gt;
+&lt;p&gt;Let&#x27;s say you need to deliver some big objects over a lossy, high latency pipe. As we previously explored, these suck. The combination of packet loss and high latencies makes any kind of retransmission scheme darn near impossible.&lt;&#x2F;p&gt;
+&lt;p&gt;But we can&#x27;t use any clever tricks like shipping a buffer because the smallest message we want to send may be larger than our MTU. Sending by TCP may be impossible because TCP&#x27;s response to steady packet loss is to just back-off until conditions improve.&lt;&#x2F;p&gt;
+&lt;p&gt;And bare UDP is no better. Sending via UDP (even repeatedly) will almost certainly fail because the datagram will be fragmented and the loss of any fragment will result in the datagram being un-constructable. Even at a low 1% packet loss, a datagram consisting of 10 fragments has a ~9.5% probability of experiencing a failure.&lt;&#x2F;p&gt;
+&lt;p&gt;So, we can&#x27;t retransmit, and we can&#x27;t spam the message. What can we do? We need a mechanism that will ensure the other side gets enough pieces to reconstruct the message. But just duplicating each chunk would be terribly inefficient.&lt;&#x2F;p&gt;
+&lt;p&gt;Fortunately, there are several ways we can (within reason) guarantee the other side gets the message despite a terrible connection. In this post, we are going to look at one of the more common ones.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;reed-solomon-codes&quot;&gt;Reed-Solomon Codes&lt;&#x2F;h2&gt;
+&lt;p&gt;Reed-Solomon erasure codes (more formally known as Reed-Solomon error correction) are a group of error-correcting algorithms devised by Irving S. Reed and Gustave Solomon in 1960. They became quite ubiquitous, found in everything from hyperscale distributed storage systems to CDs and DVDs, as well as in a lot of prior art in network and radio transmission systems such as WiMAX and the venerable RAID 6.&lt;&#x2F;p&gt;
+&lt;p&gt;What Reed-Solomon does is allow you to break your data down into an arbitrary number of &lt;code&gt;k + m&lt;&#x2F;code&gt; shards, where &lt;code&gt;k&lt;&#x2F;code&gt; are equal chunks of the original message, and &lt;code&gt;m&lt;&#x2F;code&gt; are parity shards of equal size. Any &lt;code&gt;k&lt;&#x2F;code&gt; number of shards (regardless of whether they are the original data, or parity) are sufficient to decode the original message. Assembling all of the &lt;code&gt;k&lt;&#x2F;code&gt; shards is less CPU intensive, though, since you simply concatenate them together.&lt;&#x2F;p&gt;
+&lt;p&gt;So, you split your bytes up into shards (parity and data), and then transmit those shards individually instead of your original object. If enough of them make it to the other side, the original bytes can be decoded on the other side.&lt;&#x2F;p&gt;
+&lt;p&gt;Play around with the calculator below to see how much shard&#x2F;packet loss different &lt;code&gt;k&lt;&#x2F;code&gt; and &lt;code&gt;m&lt;&#x2F;code&gt; values will tolerate.&lt;&#x2F;p&gt;
+&lt;div class=&quot;applet&quot; data-applet=&quot;reed-solomon&quot;&gt;
+  &lt;div class=&quot;applet__controls&quot;&gt;
+    &lt;label class=&quot;applet__field&quot;&gt;
+      &lt;span&gt;k (data shards)&lt;&#x2F;span&gt;
+      &lt;input type=&quot;number&quot; class=&quot;applet__input rs-input-k&quot; min=&quot;1&quot; step=&quot;1&quot; inputmode=&quot;numeric&quot;&gt;
+    &lt;&#x2F;label&gt;
+    &lt;label class=&quot;applet__field&quot;&gt;
+      &lt;span&gt;m (parity shards)&lt;&#x2F;span&gt;
+      &lt;input type=&quot;number&quot; class=&quot;applet__input rs-input-m&quot; min=&quot;0&quot; step=&quot;1&quot; inputmode=&quot;numeric&quot;&gt;
+    &lt;&#x2F;label&gt;
+    &lt;label class=&quot;applet__field&quot;&gt;
+      &lt;span&gt;Object size&lt;&#x2F;span&gt;
+      &lt;span class=&quot;applet__field-row&quot;&gt;
+        &lt;input type=&quot;number&quot; class=&quot;applet__input rs-input-size&quot; min=&quot;0&quot; step=&quot;any&quot;&gt;
+        &lt;select class=&quot;applet__select rs-input-unit&quot;&gt;
+          &lt;option value=&quot;1&quot;&gt;B&lt;&#x2F;option&gt;
+          &lt;option value=&quot;1024&quot;&gt;KiB&lt;&#x2F;option&gt;
+          &lt;option value=&quot;1048576&quot; selected&gt;MiB&lt;&#x2F;option&gt;
+          &lt;option value=&quot;1073741824&quot;&gt;GiB&lt;&#x2F;option&gt;
+        &lt;&#x2F;select&gt;
+      &lt;&#x2F;span&gt;
+    &lt;&#x2F;label&gt;
+    &lt;label class=&quot;applet__field applet__field--wide&quot;&gt;
+      &lt;span&gt;% shards lost: &lt;span class=&quot;rs-loss-value&quot;&gt;0&lt;&#x2F;span&gt;%&lt;&#x2F;span&gt;
+      &lt;input type=&quot;range&quot; class=&quot;applet__slider rs-input-loss&quot; min=&quot;0&quot; max=&quot;100&quot; step=&quot;1&quot; value=&quot;0&quot;&gt;
+    &lt;&#x2F;label&gt;
+    &lt;button type=&quot;button&quot; class=&quot;applet__button rs-reroll-btn&quot;&gt;Reroll&lt;&#x2F;button&gt;
+  &lt;&#x2F;div&gt;
+
+  &lt;p class=&quot;applet__error rs-error&quot; hidden&gt;&lt;&#x2F;p&gt;
+
+  &lt;div class=&quot;applet__grid rs-grid&quot; role=&quot;img&quot; aria-label=&quot;Shard status grid&quot;&gt;&lt;&#x2F;div&gt;
+
+  &lt;dl class=&quot;applet__stats rs-stats&quot;&gt;
+    &lt;div&gt;&lt;dt&gt;Shard size&lt;&#x2F;dt&gt;&lt;dd class=&quot;rs-stat-shard-size&quot;&gt;-&lt;&#x2F;dd&gt;&lt;&#x2F;div&gt;
+    &lt;div&gt;&lt;dt&gt;Padding&lt;&#x2F;dt&gt;&lt;dd class=&quot;rs-stat-padding&quot;&gt;-&lt;&#x2F;dd&gt;&lt;&#x2F;div&gt;
+    &lt;div&gt;&lt;dt&gt;Transmitted size&lt;&#x2F;dt&gt;&lt;dd class=&quot;rs-stat-transmitted&quot;&gt;-&lt;&#x2F;dd&gt;&lt;&#x2F;div&gt;
+    &lt;div&gt;&lt;dt&gt;Overhead&lt;&#x2F;dt&gt;&lt;dd class=&quot;rs-stat-overhead&quot;&gt;-&lt;&#x2F;dd&gt;&lt;&#x2F;div&gt;
+  &lt;&#x2F;dl&gt;
+
+  &lt;div class=&quot;applet__verdict rs-verdict&quot; data-state=&quot;pending&quot;&gt;
+    &lt;p class=&quot;applet__verdict-headline rs-verdict-headline&quot;&gt;-&lt;&#x2F;p&gt;
+    &lt;p class=&quot;applet__verdict-detail rs-verdict-detail&quot;&gt;&lt;&#x2F;p&gt;
+  &lt;&#x2F;div&gt;
+&lt;&#x2F;div&gt;
+&lt;script type=&quot;module&quot; src=&quot;https:&#x2F;&#x2F;blog.graysonhead.net&#x2F;js&#x2F;apps&#x2F;reed-solomon.js&quot;&gt;&lt;&#x2F;script&gt;
+&lt;h2 id=&quot;simple-reed-solomon-erasure-coded-protocol&quot;&gt;Simple Reed-Solomon Erasure Coded Protocol&lt;&#x2F;h2&gt;
+&lt;p&gt;So how do we actually go about using this? Quite simply as it turns out. Let&#x27;s take a look at an example:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;use &lt;&#x2F;span&gt;&lt;span&gt;parity_scale_codec::{Decode, DecodeAll, Encode};
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Conservative shard payload ceiling: MTU (1500) minus IPv4 (20) + UDP (8) + worst-case
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; protocol header overhead.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub const &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;MAX_SHARD_SIZE&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;usize &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1400&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Maximum total shards per block (n_data + n_parity).
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Fits in a u64 bitmask; sufficient for any practical RS configuration.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub const &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;MAX_TOTAL_SHARDS&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;usize &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;64&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Opaque monotonically-increasing identifier for a group of shards encoded together.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub type &lt;&#x2F;span&gt;&lt;span&gt;BlockId = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u32&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; A single data or parity shard, carried in one UDP datagram.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Reed-Solomon requires all shards in a block to be the same byte length. The sender
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; zero-pads the last data shard to reach that length; `original_len` lets the receiver
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; strip the padding after reconstruction.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Shard indices are divided as follows within each block:
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F;   `[0, n_data)`              → data shards (original payload, possibly padded)
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F;   `[n_data, n_data+n_parity)` → parity shards (repair symbols)
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Any `n_data` shards out of the `n_data + n_parity` total are sufficient to
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; reconstruct the block.
+&lt;&#x2F;span&gt;&lt;span&gt;#[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;derive&lt;&#x2F;span&gt;&lt;span&gt;(Debug, Clone, PartialEq, Encode, Decode)]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub struct &lt;&#x2F;span&gt;&lt;span&gt;ShardPacket {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Block this shard belongs to.
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;block_id&lt;&#x2F;span&gt;&lt;span&gt;: BlockId,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Position within the block: data shards first, then parity.
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;shard_index&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u8&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; k: number of data shards. Receiver needs any k shards to reconstruct.
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;n_data&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u8&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; m: number of parity (repair) shards. Surviving up to m losses is guaranteed.
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;n_parity&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u8&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Byte length of the original un-padded block data.
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Used to trim the recovered payload after decoding.
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;original_len&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u32&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Shard bytes. Every shard in the same block has identical length.
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;payload&lt;&#x2F;span&gt;&lt;span&gt;: Vec&amp;lt;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u8&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Sent by the receiver to confirm that a block was successfully decoded.
+&lt;&#x2F;span&gt;&lt;span&gt;#[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;derive&lt;&#x2F;span&gt;&lt;span&gt;(Debug, Clone, PartialEq, Encode, Decode)]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub struct &lt;&#x2F;span&gt;&lt;span&gt;BlockAck {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;block_id&lt;&#x2F;span&gt;&lt;span&gt;: BlockId,
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Here are some of our basic messages. The &lt;code&gt;ShardPacket&lt;&#x2F;code&gt; is the main message that is going to do our heavy lifting. It has a block_id, which allows for multiplexing and interleaving of sends (as the receiver can tell packets for different objects apart), and a shard_index, which tells the receiver what position to place this packet in the decoder.&lt;&#x2F;p&gt;
+&lt;p&gt;We also include three items of metadata: the number of data shards, the number of parity shards, and the original length of the object. Since this is a protocol designed to tolerate loss, we don&#x27;t know which of our packets will actually get to the host, so doing some kind of handshake at the start of each object send wouldn&#x27;t be wise. If we are using a code with &lt;code&gt;m:20&lt;&#x2F;code&gt;, we could lose the first 20 packets and still be able to decode the object in the end. So the small (6 byte) overhead is well worth it.&lt;&#x2F;p&gt;
+&lt;p&gt;For the return path, upon successfully decoding an object, the receiver will return a &lt;code&gt;BlockAck&lt;&#x2F;code&gt; with the block_id that was decoded.&lt;&#x2F;p&gt;
+&lt;p&gt;As for the actual encoding of blocks, the Rust crate I used for this example makes this very easy:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;use &lt;&#x2F;span&gt;&lt;span&gt;reed_solomon_erasure::galois_8::ReedSolomon;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;use super&lt;&#x2F;span&gt;&lt;span&gt;::types::{BlockId, ShardPacket, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;MAX_TOTAL_SHARDS&lt;&#x2F;span&gt;&lt;span&gt;};
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Encode `data` into `n_data + n_parity` [`ShardPacket`]s for a single block.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; All shards are the same byte length.  The last data shard is zero-padded if
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; `data.len()` is not an exact multiple of `n_data`; `original_len` in every
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; packet carries the true length so the receiver can strip the padding.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;encode_block&lt;&#x2F;span&gt;&lt;span&gt;(
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;data&lt;&#x2F;span&gt;&lt;span&gt;: &amp;amp;[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u8&lt;&#x2F;span&gt;&lt;span&gt;],
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;block_id&lt;&#x2F;span&gt;&lt;span&gt;: BlockId,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;n_data&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u8&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;n_parity&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u8&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;) -&amp;gt; anyhow::Result&amp;lt;Vec&amp;lt;ShardPacket&amp;gt;&amp;gt; {
+&lt;&#x2F;span&gt;&lt;span&gt;    anyhow::ensure!(n_data &amp;gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1&lt;&#x2F;span&gt;&lt;span&gt;, &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;n_data must be &amp;gt;= 1&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;);
+&lt;&#x2F;span&gt;&lt;span&gt;    anyhow::ensure!(n_parity &amp;gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1&lt;&#x2F;span&gt;&lt;span&gt;, &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;n_parity must be &amp;gt;= 1&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;);
+&lt;&#x2F;span&gt;&lt;span&gt;    anyhow::ensure!(
+&lt;&#x2F;span&gt;&lt;span&gt;        n_data as &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;usize &lt;&#x2F;span&gt;&lt;span&gt;+ n_parity as &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;usize &lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;MAX_TOTAL_SHARDS&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;        &amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;n_data ({n_data}) + n_parity ({n_parity}) exceeds MAX_TOTAL_SHARDS ({MAX_TOTAL_SHARDS})&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;
+&lt;&#x2F;span&gt;&lt;span&gt;    );
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; k = n_data as &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;usize&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; m = n_parity as &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;usize&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; original_len = data.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;len&lt;&#x2F;span&gt;&lt;span&gt;() as &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u32&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Shard size: ceiling division, minimum 1 to avoid zero-length shards.
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; shard_size = ((data.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;len&lt;&#x2F;span&gt;&lt;span&gt;() + k - &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1&lt;&#x2F;span&gt;&lt;span&gt;) &#x2F; k).&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;max&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1&lt;&#x2F;span&gt;&lt;span&gt;);
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Pad data to exactly k * shard_size bytes.
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let mut&lt;&#x2F;span&gt;&lt;span&gt; padded = data.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;to_vec&lt;&#x2F;span&gt;&lt;span&gt;();
+&lt;&#x2F;span&gt;&lt;span&gt;    padded.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;resize&lt;&#x2F;span&gt;&lt;span&gt;(k * shard_size, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0&lt;&#x2F;span&gt;&lt;span&gt;);
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Build the shard vec: k data shards followed by m zeroed parity slots.
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let mut&lt;&#x2F;span&gt;&lt;span&gt; shards: Vec&amp;lt;Vec&amp;lt;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u8&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;&amp;gt; = padded.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;chunks&lt;&#x2F;span&gt;&lt;span&gt;(shard_size).&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;map&lt;&#x2F;span&gt;&lt;span&gt;(&amp;lt;[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u8&lt;&#x2F;span&gt;&lt;span&gt;]&amp;gt;::to_vec).&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;collect&lt;&#x2F;span&gt;&lt;span&gt;();
+&lt;&#x2F;span&gt;&lt;span&gt;    shards.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;extend&lt;&#x2F;span&gt;&lt;span&gt;((&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0&lt;&#x2F;span&gt;&lt;span&gt;..m).&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;map&lt;&#x2F;span&gt;&lt;span&gt;(|_| vec![&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u8&lt;&#x2F;span&gt;&lt;span&gt;; shard_size]));
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; rs = ReedSolomon::new(k, m)
+&lt;&#x2F;span&gt;&lt;span&gt;        .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;map_err&lt;&#x2F;span&gt;&lt;span&gt;(|&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;e&lt;&#x2F;span&gt;&lt;span&gt;| anyhow::anyhow!(&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;ReedSolomon::new failed: {e:?}&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;))?;
+&lt;&#x2F;span&gt;&lt;span&gt;    rs.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;encode&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span&gt; shards)
+&lt;&#x2F;span&gt;&lt;span&gt;        .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;map_err&lt;&#x2F;span&gt;&lt;span&gt;(|&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;e&lt;&#x2F;span&gt;&lt;span&gt;| anyhow::anyhow!(&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#a3be8c;&quot;&gt;encode failed: {e:?}&lt;&#x2F;span&gt;&lt;span&gt;&amp;quot;))?;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    Ok(shards
+&lt;&#x2F;span&gt;&lt;span&gt;        .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;into_iter&lt;&#x2F;span&gt;&lt;span&gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;        .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;enumerate&lt;&#x2F;span&gt;&lt;span&gt;()
+&lt;&#x2F;span&gt;&lt;span&gt;        .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;map&lt;&#x2F;span&gt;&lt;span&gt;(|(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;i&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;payload&lt;&#x2F;span&gt;&lt;span&gt;)| ShardPacket {
+&lt;&#x2F;span&gt;&lt;span&gt;            block_id,
+&lt;&#x2F;span&gt;&lt;span&gt;            shard_index: i as &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u8&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;            n_data,
+&lt;&#x2F;span&gt;&lt;span&gt;            n_parity,
+&lt;&#x2F;span&gt;&lt;span&gt;            original_len,
+&lt;&#x2F;span&gt;&lt;span&gt;            payload,
+&lt;&#x2F;span&gt;&lt;span&gt;        })
+&lt;&#x2F;span&gt;&lt;span&gt;        .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;collect&lt;&#x2F;span&gt;&lt;span&gt;())
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Sizing your receive and retransmission buffers means balancing memory usage against how many blocks you&#x27;re willing to have in flight at once, since both sender and receiver need enough room to hold them. The good news is that the FEC overhead doesn&#x27;t inflate that math: you only ever need to hold one object&#x27;s worth of data in the receive buffer, because as soon as the last piece needed to decode it arrives, any leftover shards for that object can be dropped. So you can still size your buffers to roughly your bandwidth delay product, protocol overhead aside.&lt;&#x2F;p&gt;
+&lt;p&gt;Another thing worth mentioning is that it does take more CPU to reconstruct objects from parity than it does to simply concatenate all the data blocks together, so I would definitely ensure that your protocol sends all of the data blocks first. On a healthy connection, this will reduce CPU usage on the receiver.&lt;&#x2F;p&gt;
+&lt;p&gt;With all of this, we have a pretty good delivery system that passively tolerates some loss. But for a truly reliable program, that isn&#x27;t enough, and we still need a back-up system.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;retransmission&quot;&gt;Retransmission&lt;&#x2F;h2&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Sent by the receiver when a block cannot yet be recovered (timeout before n_data shards arrived).
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; The sender uses `received_mask` for selective retransmit: only missing shards are resent.
+&lt;&#x2F;span&gt;&lt;span&gt;#[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;derive&lt;&#x2F;span&gt;&lt;span&gt;(Debug, Clone, PartialEq, Encode, Decode)]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub struct &lt;&#x2F;span&gt;&lt;span&gt;BlockNack {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;block_id&lt;&#x2F;span&gt;&lt;span&gt;: BlockId,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Bitmask of received shards: bit i is set iff shard_index i arrived.
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Bit width is sufficient for n_total ≤ MAX_TOTAL_SHARDS.
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;received_mask&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u64&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;After seeing the first packet for a given &lt;code&gt;block_id&lt;&#x2F;code&gt;, the receiver will start emitting &lt;code&gt;BlockNacks&lt;&#x2F;code&gt; if it cannot decode the block within a given timeout. And in this packet, quite a bit is communicated in a very small number of bytes.&lt;&#x2F;p&gt;
+&lt;p&gt;The &lt;code&gt;block_id&lt;&#x2F;code&gt; is the same as above, but the &lt;code&gt;received_mask&lt;&#x2F;code&gt; is quite interesting. It&#x27;s a bitmask of each shard. From this one integer, the sender can derive exactly which parity&#x2F;data shards it needs to resend from the retransmit buffer:&lt;&#x2F;p&gt;
+&lt;p&gt;As a small example, say &lt;code&gt;n_data = 4&lt;&#x2F;code&gt; and &lt;code&gt;n_parity = 2&lt;&#x2F;code&gt; (6 shards total), and the receiver only got shards 0, 2, and 4 before giving up and sending a &lt;code&gt;BlockNack&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;shard_index:  0  1  2  3  4  5
+&lt;&#x2F;span&gt;&lt;span&gt;              └── data ──┘└parity┘
+&lt;&#x2F;span&gt;&lt;span&gt;arrived?      ✓  ✗  ✓  ✗  ✓  ✗
+&lt;&#x2F;span&gt;&lt;span&gt;mask bit:     1  0  1  0  1  0
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Read as an integer, those bits are &lt;code&gt;received_mask = 0b010101&lt;&#x2F;code&gt; (&lt;code&gt;0x15&lt;&#x2F;code&gt;, 21 decimal). The sender doesn&#x27;t have to guess or ask which shards are missing. It just scans the mask for &lt;code&gt;0&lt;&#x2F;code&gt; bits and resends exactly those: shard 1 and shard 3 (data), and shard 5 (parity).&lt;&#x2F;p&gt;
+&lt;p&gt;And this allows for another neat trick as well: the sender can measure packet loss in one direction without sequence numbers or any other fancy analytical machinery. This can even be used as a feedback mechanism for the sender to dynamically adjust its coding rate (&lt;code&gt;k + m&lt;&#x2F;code&gt;)!&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;dynamic-m&quot;&gt;Dynamic M&lt;&#x2F;h2&gt;
+&lt;p&gt;It&#x27;s important to understand that the superpower of an FEC scheme is not in its retransmission mechanism, however efficient that might be. Using Reed-Solomon codes to send traffic in the first place incurs overhead, so in order to make the trade-off in overhead worth it, you should make sure that your delivery has a high chance of succeeding on the first try. The best way to do this is to make your protocol aware of the current link conditions and have it dynamically select &lt;code&gt;m&lt;&#x2F;code&gt; based on that.&lt;&#x2F;p&gt;
+&lt;p&gt;To see why that matters, it helps to look past a single roll of the dice and ask: across a whole spread of packet loss rates, what&#x27;s the actual probability that a block gets through on the first try for a given &lt;code&gt;k + m&lt;&#x2F;code&gt;? Set &lt;code&gt;k&lt;&#x2F;code&gt; and &lt;code&gt;m&lt;&#x2F;code&gt; below and the table works out &lt;code&gt;P(success)&lt;&#x2F;code&gt; (and its complement) at each loss rate exactly:&lt;&#x2F;p&gt;
+&lt;div class=&quot;applet&quot; data-applet=&quot;delivery-probability&quot;&gt;
+  &lt;div class=&quot;applet__controls&quot;&gt;
+    &lt;label class=&quot;applet__field&quot;&gt;
+      &lt;span&gt;k (data shards)&lt;&#x2F;span&gt;
+      &lt;input type=&quot;number&quot; class=&quot;applet__input dp-input-k&quot; min=&quot;1&quot; step=&quot;1&quot; inputmode=&quot;numeric&quot;&gt;
+    &lt;&#x2F;label&gt;
+    &lt;label class=&quot;applet__field&quot;&gt;
+      &lt;span&gt;m (parity shards)&lt;&#x2F;span&gt;
+      &lt;input type=&quot;number&quot; class=&quot;applet__input dp-input-m&quot; min=&quot;0&quot; step=&quot;1&quot; inputmode=&quot;numeric&quot;&gt;
+    &lt;&#x2F;label&gt;
+    &lt;div class=&quot;applet__field&quot;&gt;
+      &lt;span&gt;Overhead&lt;&#x2F;span&gt;
+      &lt;span class=&quot;dp-stat-overhead&quot;&gt;-&lt;&#x2F;span&gt;
+    &lt;&#x2F;div&gt;
+  &lt;&#x2F;div&gt;
+
+  &lt;p class=&quot;applet__error dp-error&quot; hidden&gt;&lt;&#x2F;p&gt;
+
+  &lt;div class=&quot;dp-table-wrap&quot;&gt;
+    &lt;table class=&quot;dp-table&quot;&gt;
+      &lt;thead&gt;
+        &lt;tr&gt;
+          &lt;th&gt;Packet loss&lt;&#x2F;th&gt;
+          &lt;th&gt;P(successful delivery)&lt;&#x2F;th&gt;
+          &lt;th&gt;P(failure)&lt;&#x2F;th&gt;
+          &lt;th&gt;1 lost block every...&lt;&#x2F;th&gt;
+        &lt;&#x2F;tr&gt;
+      &lt;&#x2F;thead&gt;
+      &lt;tbody class=&quot;dp-table-body&quot;&gt;&lt;&#x2F;tbody&gt;
+    &lt;&#x2F;table&gt;
+  &lt;&#x2F;div&gt;
+&lt;&#x2F;div&gt;
+&lt;script type=&quot;module&quot; src=&quot;https:&#x2F;&#x2F;blog.graysonhead.net&#x2F;js&#x2F;apps&#x2F;delivery-probability.js&quot;&gt;&lt;&#x2F;script&gt;
+&lt;p&gt;Notice how a fixed coding rate can go from comfortably safe to essentially guaranteed failure over a fairly narrow band of loss rates. That&#x27;s the argument for measuring current conditions and feeding them back into &lt;code&gt;m&lt;&#x2F;code&gt;, rather than picking one static value and hoping it holds.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;the-ack-problem&quot;&gt;The Ack Problem&lt;&#x2F;h2&gt;
+&lt;p&gt;But if you implemented this protocol exactly as described, it wouldn&#x27;t work well in practice. Data flows cleanly from sender to receiver, and assuming you can tolerate the overhead, you can transfer a considerable amount of data over pretty terrible connections. The problem is that acks and nacks travel over the same lossy link that made you reach for FEC in the first place, so the sender ends up not clearing its retransmission buffer fast enough. On a &lt;code&gt;10 + 10&lt;&#x2F;code&gt; code over a connection with 20% packet loss, delivery of objects is virtually guaranteed, but you&#x27;ll still wind up retransmitting (or stalling on) 20% of your objects anyway, simply because 20% of the receiver&#x27;s acks never made it back.&lt;&#x2F;p&gt;
+&lt;p&gt;The naive solution is to simply code the acks as well, but an ack is an extremely small message, and nacks aren&#x27;t much larger. If you remember the &lt;a href=&quot;https:&#x2F;&#x2F;blog.graysonhead.net&#x2F;posts&#x2F;reliable-delivery&#x2F;&quot;&gt;previous post&lt;&#x2F;a&gt;, this follows a pattern that our previous &amp;quot;Ring Buffer&amp;quot; reliability protocol solves very well. So one solution is to keep a ring buffer of acks, and transmit the last several acks along with every new ack. That way, on a channel with steady-state transmissions, the acks will also gain a level of reliability.&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; Owns the outgoing ACK ring buffer.
+&lt;&#x2F;span&gt;&lt;span&gt;async &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;ack_sender_task&lt;&#x2F;span&gt;&lt;span&gt;(
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;cmd_rx&lt;&#x2F;span&gt;&lt;span&gt;: mpsc::Receiver&amp;lt;AckCmd&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;sock&lt;&#x2F;span&gt;&lt;span&gt;: Arc&amp;lt;UdpSocket&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;peer_addr&lt;&#x2F;span&gt;&lt;span&gt;: SocketAddr,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;n_data&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u8&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;n_parity&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u8&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;) {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let mut&lt;&#x2F;span&gt;&lt;span&gt; ring: VecDeque&amp;lt;BlockAck&amp;gt; = VecDeque::new();
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let mut&lt;&#x2F;span&gt;&lt;span&gt; batch_id: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u32 &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;0&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;while let &lt;&#x2F;span&gt;&lt;span&gt;Some(AckCmd::Decoded(block_id)) = cmd_rx.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;recv&lt;&#x2F;span&gt;&lt;span&gt;().await {
+&lt;&#x2F;span&gt;&lt;span&gt;        ring.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;push_back&lt;&#x2F;span&gt;&lt;span&gt;(BlockAck { block_id });
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;trim_to_mtu&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span&gt; ring);
+&lt;&#x2F;span&gt;&lt;span&gt;        batch_id = batch_id.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;wrapping_add&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1&lt;&#x2F;span&gt;&lt;span&gt;);
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;send_ack_batch&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;ring, &amp;amp;sock, peer_addr, batch_id, n_data, n_parity).await;
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Every new decode appends to the ring and resends the whole thing, so any single ack getting through carries several of its predecessors along with it. In practice you&#x27;ll also want to resend the ring on a timer during idle periods (so it drains even if no new blocks arrive) and cap how many times you burst-resend after a decode, but that&#x27;s just scheduling logic layered on top of this same core loop.&lt;&#x2F;p&gt;
+&lt;p&gt;And this is probably pretty reliable by itself. But now, we have turned a bunch of small acks back into a large object. If we have extra bandwidth to spend, we can also just FEC encode the ring buffer full of acks as well:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; FEC-encode the ACK ring and send each shard as `Packet::AckShard`.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; The sender accumulates shards by `batch_id` and decodes when n_data arrive,
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F;&#x2F; gaining the same loss protection as data shards at the same overhead.
+&lt;&#x2F;span&gt;&lt;span&gt;async &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#8fa1b3;&quot;&gt;send_ack_batch&lt;&#x2F;span&gt;&lt;span&gt;(
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;ring&lt;&#x2F;span&gt;&lt;span&gt;: &amp;amp;VecDeque&amp;lt;BlockAck&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;sock&lt;&#x2F;span&gt;&lt;span&gt;: &amp;amp;UdpSocket,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;peer_addr&lt;&#x2F;span&gt;&lt;span&gt;: SocketAddr,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;batch_id&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u32&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;n_data&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u8&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;n_parity&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u8&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;) {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; acks: Vec&amp;lt;BlockAck&amp;gt; = ring.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;iter&lt;&#x2F;span&gt;&lt;span&gt;().&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;cloned&lt;&#x2F;span&gt;&lt;span&gt;().&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;collect&lt;&#x2F;span&gt;&lt;span&gt;();
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; payload = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;encode_ack_batch&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;acks);
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;if let &lt;&#x2F;span&gt;&lt;span&gt;Ok(shards) = &lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;encode_block&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;payload, batch_id, n_data, n_parity) {
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;for&lt;&#x2F;span&gt;&lt;span&gt; shard in shards {
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; bytes = Packet::AckShard(shard).&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;encode_to_vec&lt;&#x2F;span&gt;&lt;span&gt;();
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;let &lt;&#x2F;span&gt;&lt;span&gt;_ = sock.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#96b5b4;&quot;&gt;send_to&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;bytes, peer_addr).await;
+&lt;&#x2F;span&gt;&lt;span&gt;        }
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;And while this does add overhead, the acks...again...are tiny. There are lots of tradeoffs here, which result in a lot of knobs to turn, but if you have constant steady-state packet loss and you want your buffers as close to the bandwidth delay product as possible, spending a comparatively small amount of overhead on making your ack delivery more reliable is probably worth it.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;erasure-coding-in-practice&quot;&gt;Erasure Coding In Practice&lt;&#x2F;h2&gt;
+&lt;p&gt;Practically speaking, the theory applies very well in practice. At least, so long as you test with tools that assume each packet has an independent probability of being lost (we will explore a more realistic loss profile and what you can do about it in a future article).&lt;&#x2F;p&gt;
+&lt;p&gt;For instance, at &lt;code&gt;k=10 m=8&lt;&#x2F;code&gt; with 10% packet loss, theory predicts a lost block roughly once every 47,900:&lt;&#x2F;p&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery_2&#x2F;fec_1.png&quot; alt=&quot;Graph showing FEC throughput at k=10 m=8 with 10% loss, holding steady around 0.7 Mbps with zero retransmits&quot; &#x2F;&gt;
+&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;--- Summary ---
+&lt;&#x2F;span&gt;&lt;span&gt;Loss rate:             10.0%
+&lt;&#x2F;span&gt;&lt;span&gt;RTT (final est.):    102.96ms
+&lt;&#x2F;span&gt;&lt;span&gt;Blocks pushed:          4000
+&lt;&#x2F;span&gt;&lt;span&gt;Blocks delivered:       4000
+&lt;&#x2F;span&gt;&lt;span&gt;Shard retransmits:         0
+&lt;&#x2F;span&gt;&lt;span&gt;  via NACK:                0
+&lt;&#x2F;span&gt;&lt;span&gt;  via RTO:                 0  (0 full-block events)
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;As expected, we don&#x27;t even trigger the retransmission mechanism at 10% loss: all blocks were decoded on the first attempt.&lt;&#x2F;p&gt;
+&lt;p&gt;At 15% packet loss, however, probability says we should fail to decode a block every 1,960:&lt;&#x2F;p&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery_2&#x2F;fec_2.png&quot; alt=&quot;Graph showing FEC throughput at k=10 m=8 with 15% loss, holding steady around 0.7 Mbps with a couple of small retransmit spikes&quot; &#x2F;&gt;
+&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;--- Summary ---
+&lt;&#x2F;span&gt;&lt;span&gt;Loss rate:             15.0%
+&lt;&#x2F;span&gt;&lt;span&gt;RTT (final est.):    103.29ms
+&lt;&#x2F;span&gt;&lt;span&gt;Blocks pushed:          2000
+&lt;&#x2F;span&gt;&lt;span&gt;Blocks delivered:       2000
+&lt;&#x2F;span&gt;&lt;span&gt;Shard retransmits:        45
+&lt;&#x2F;span&gt;&lt;span&gt;  via NACK:                9
+&lt;&#x2F;span&gt;&lt;span&gt;  via RTO:                36  (2 full-block events)
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Theory predicted roughly one block would fail to decode outright (which requires losing 9 or more of the 18 shards, one past what &lt;code&gt;m=8&lt;&#x2F;code&gt; parity can cover), and in practice we ended up retransmitting 9 shards via the NACK path to recover it. On the other hand, we retransmitted 36 via RTO, but those are due to losses of acks. So the test very closely matches the theory.&lt;&#x2F;p&gt;
+&lt;p&gt;For an extreme example:&lt;&#x2F;p&gt;
+&lt;p&gt;90% loss rate, 100ms RTT, small window and bandwidth-limited connection:&lt;&#x2F;p&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery_2&#x2F;extreme_1.png&quot; alt=&quot;Graph showing FEC throughput at k=1 m=63 with 90% loss and a 10 Mbps bandwidth cap, holding around 0.08 Mbps of delivered throughput despite spending nearly 5 Mbps on shards&quot; &#x2F;&gt;
+&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;--- Summary ---
+&lt;&#x2F;span&gt;&lt;span&gt;Loss rate:             90.0%
+&lt;&#x2F;span&gt;&lt;span&gt;RTT (final est.):    112.56ms
+&lt;&#x2F;span&gt;&lt;span&gt;Blocks pushed:           100
+&lt;&#x2F;span&gt;&lt;span&gt;Blocks delivered:        100
+&lt;&#x2F;span&gt;&lt;span&gt;Shard retransmits:         0
+&lt;&#x2F;span&gt;&lt;span&gt;  via NACK:                0
+&lt;&#x2F;span&gt;&lt;span&gt;  via RTO:                 0  (0 full-block events)
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;We shrunk the 10 Mbps pipe down to a measly 79 kbps one, but passively delivering &lt;em&gt;anything&lt;&#x2F;em&gt; without retransmissions against 90% packet loss is no joke.&lt;&#x2F;p&gt;
+&lt;p&gt;I think the most common use case for this, though, is to just pave over the first 1-3% packet loss that would result in you losing more than 2&#x2F;3rds of your TCP bandwidth. For example, this clearly shows the 40% overhead you pay for running &lt;code&gt;k=10 m=4&lt;&#x2F;code&gt;, but pretty much all your deliveries make it the first time:&lt;&#x2F;p&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery_2&#x2F;fec_3.png&quot; alt=&quot;Graph showing FEC throughput at k=10 m=4 with 2% loss, delivering around 95 Mbps steadily against about 135 Mbps of raw bandwidth spent, with retransmits dropping to zero after a brief initial spike&quot; &#x2F;&gt;
+&lt;p&gt;And, if you remember from the previous article, the usable bandwidth of a lossy TCP stream drops severely with latency. That&#x27;s not a buffer size problem; bigger send&#x2F;receive windows won&#x27;t fix it. It&#x27;s because congestion control only grows the congestion window by about one segment per round trip, so after a loss event, recovering back to full speed takes wall-clock time proportional to RTT. This scheme doesn&#x27;t have a congestion window to collapse and slowly climb back from, so as long as you don&#x27;t fill the send window, latency alone doesn&#x27;t cost you &lt;em&gt;any&lt;&#x2F;em&gt; throughput:&lt;&#x2F;p&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery_2&#x2F;fec_4.png&quot; alt=&quot;Graph showing FEC throughput at k=10 m=4 with 2% loss and rtt:20ms, holding around 94 Mbps of throughput with zero retransmits, essentially unchanged from the 2ms RTT case&quot; &#x2F;&gt;
+&lt;h2 id=&quot;wrapping-up&quot;&gt;Wrapping Up&lt;&#x2F;h2&gt;
+&lt;p&gt;Reed-Solomon FEC gives you the option to trade off reliability for overhead. Instead of chasing dropped packets after the fact, you spend a bit of bandwidth up front so that most blocks arrive complete on the first try, even over links that are dropping a meaningful fraction of everything you send.
+&lt;br&gt;
+It&#x27;s also worth remembering that everything above pairs FEC with a retransmission mechanism, but that&#x27;s not a requirement. Plenty of use cases just run FEC on its own at a fixed coding rate and accept the residual failure probability, skipping acks and retransmission buffers entirely.&lt;&#x2F;p&gt;
+&lt;p&gt;Perhaps the most important thing to realize is that this isn&#x27;t strictly better than a pure retransmission-based reliable protocol such as TCP. As elegant a solution as erasure codes are, they&#x27;re inefficient: both ends burn CPU cycles doing encodes and decodes&lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#1&quot;&gt;1&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;, and the sender &lt;em&gt;always&lt;&#x2F;em&gt; transmits more data than it strictly needs to. TCP, by contrast, transmits exactly as much data as is required and no more.&lt;&#x2F;p&gt;
+&lt;p&gt;There&#x27;s a second cost too: since there&#x27;s no congestion control backing any of this off, a stream like this will happily fill 100% of its allotted bandwidth regardless of what else is sharing the link. It isn&#x27;t a great neighbor on a connection anyone else is using, and it won&#x27;t back off the way TCP will if something else needs the room.&lt;&#x2F;p&gt;
+&lt;p&gt;But in two situations, retransmission-based protocols like TCP and QUIC are not ideal, and a scheme like this is far better:&lt;&#x2F;p&gt;
+&lt;p&gt;The first is high-latency links. If you have a 300ms RTT, every failed delivery is going to take 300ms to resolve &lt;em&gt;in the ideal case&lt;&#x2F;em&gt;. More likely, the failures will stack on top of each other, and seconds will go by before delivery finally goes through. In the case of TCP, this means that for that period of time, no new data is going to make it to the other end either.&lt;&#x2F;p&gt;
+&lt;p&gt;And second, there are cases where regular packet loss is expected. If you have a constant 1-2% packet loss, &lt;code&gt;k=10 m=4&lt;&#x2F;code&gt; virtually guarantees delivery in exchange for 40% overhead. 40% may sound like a lot, but when you consider that a 200 Mbps link with 1% packet loss, as utilized by TCP, will be capable of delivering about 40 Mbps, it starts sounding a lot better. That is an 80% reduction in bandwidth versus 40% overhead. And the higher packet loss gets, the more this trade works out in favor of passive FEC.&lt;&#x2F;p&gt;
+&lt;p&gt;And bear in mind, if you do want a dynamic &lt;code&gt;m&lt;&#x2F;code&gt; determined by current link conditions, the state machine required on both sides of the connection is rather complex. Totally tractable, but definitely not as trivial as I&#x27;ve hand-waved it here.&lt;&#x2F;p&gt;
+&lt;p&gt;And it&#x27;s also important to mention that the testing here doesn&#x27;t reflect the real world, because packet loss is not per-packet independent. For Reed-Solomon, this is actually not as big of a deal on a packet-by-packet basis: it doesn&#x27;t matter which of the blocks you lose, so long as you don&#x27;t lose &lt;code&gt;m&lt;&#x2F;code&gt; of them. But once you start multiplexing objects, short periods of loss will result in either losing blocks (or triggering your retransmission mechanism) even if your coding rate is high enough to absorb the packet loss averaged over some period of time.&lt;&#x2F;p&gt;
+&lt;p&gt;And, of course, there are also solutions for that. But we will have to talk about those next time.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;1&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;1&lt;&#x2F;sup&gt;
+&lt;p&gt;And until recently, CPUs were not great at doing multiplication and division in a Galois field, which made this significantly worse.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>Reliable Delivery Over Horrible Networks</title>
+        <published>2026-03-26T00:00:00+00:00</published>
+        <updated>2026-03-26T00:00:00+00:00</updated>
+        <author>
+          <name>Unknown</name>
+        </author>
+        <link rel="alternate" href="https://blog.graysonhead.net/posts/reliable-delivery/" type="text/html"/>
+        <id>https://blog.graysonhead.net/posts/reliable-delivery/</id>
+        
+        <content type="html">&lt;p&gt;TCP is a cornerstone of the internet for good reason: it works very well in most situations. One of the reasons it is so effective is because of how it handles dealing with congestion. Congestion control algorithms are like a bouncer at a packed venue. When things are backed up inside, nobody new gets in. When there&#x27;s room, the line starts moving again.&lt;&#x2F;p&gt;
+&lt;p&gt;And as far as TCP is concerned, the best signal for congestion is lost segments &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#1&quot;&gt;1&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt; (segments being the individual unit of data that gets wrapped in an ethernet frame &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#2&quot;&gt;2&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;). But loss isn&#x27;t always congestion. Sometimes loss is switching cell towers. Sometimes loss is because you are right on the edge of the effective range of a radio link. Sometimes loss is adversarial interference.&lt;&#x2F;p&gt;
+&lt;p&gt;At a certain percentage of loss, you won&#x27;t be able to deliver any data via TCP at all.&lt;&#x2F;p&gt;
+&lt;p&gt;So let&#x27;s say you are building a network stack for unmanned vehicles that might operate in environments with adversarial jamming. How can you be sure you can deliver a critical message to them in the case of an emergency?&lt;&#x2F;p&gt;
+&lt;p&gt;As we will soon discover, it depends.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;latency-sucks&quot;&gt;Latency Sucks&lt;&#x2F;h2&gt;
+&lt;p&gt;The two prime guarantees of TCP are:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Reliable Delivery (your byte stream will make it to the other side)&lt;&#x2F;li&gt;
+&lt;li&gt;Ordered (your byte stream will arrive in the same order you sent it)&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;And solving these two guarantees efficiently drives much of the design of TCP. And the key to understanding this (and often, to troubleshooting TCP issues) are the &amp;quot;windows&amp;quot; that regulate the flow of data between nodes.&lt;&#x2F;p&gt;
+&lt;p&gt;The reason this matters for us: those windows are a feedback system, and feedback systems are sensitive to latency. On a lossy, high-latency link, that sensitivity becomes TCP&#x27;s biggest weakness.&lt;&#x2F;p&gt;
+&lt;p&gt;In an ideal world, the sender would send data as fast as it possibly can, the network would dutifully transport all this data at exactly the rate the sender is sending it, and then the receiver will receive and process the data exactly as fast as the sender sends it. However, in practice, this almost never happens. What if the receiver is an overloaded webserver that is processing data from a million other clients? What if the network is congested? At some point, the sender must slow down. Windows regulate the amount of data that is allowed to be in-flight between clients at any time. They represent the gas pedal that is pressed when all is well and the data is flowing as fast as possible, as well as the brake that gets pushed if the receiver stalls, or the network quality degrades.&lt;&#x2F;p&gt;
+&lt;p&gt;The first window is the Send window. This is maintained by the sender. The purpose of this window is to hold the Bandwidth Delay Product (BDP) of the connection. You can figure out what the BDP is with some simple math. Simply multiply the rate of transmission in bytes by the latency in seconds: &lt;&#x2F;p&gt;
+&lt;p&gt;&lt;code&gt;( BDP = bandwidth * rtt)&lt;&#x2F;code&gt;. &lt;&#x2F;p&gt;
+&lt;p&gt;For example, if your application can saturate a 10Gbps NIC and you are sending data to a host 10ms from you, your BDP is &lt;code&gt;10 Gigabits&#x2F;s * .01&lt;&#x2F;code&gt;. Which works out to around 12.5 Megabytes. In theory, if all you were doing was sending data from one machine to one client, you could set your send buffer &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#3&quot;&gt;3&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt; to this exact value and never need to adjust it. But in practice, this window (as well as all the others) are subject to algorithms that constantly increase and decrease their size to accommodate changing conditions.&lt;&#x2F;p&gt;
+&lt;p&gt;So when we send data, data gets put into this buffer. But why don&#x27;t we forget it? Why does it still stick around after sending? That is because we need to know the other side received it before it can be discarded. We need delivery to be reliable. Once the other side sends us an ACK for that specific segment, then we can drop that specific data from the send buffer and free up room to send more data, but until this happens, the sending side must retain it for possible retransmission. So in addition to being a throttling mechanism, the send buffer can also be a cache for retransmission. To put it simply, the buffer derived from the send window is what allows us to guarantee that the data is both reliably delivered, and ordered.&lt;&#x2F;p&gt;
+&lt;p&gt;Next, we have the Receive window. This window regulates how quickly the host on the receiving side of the connection is actually consuming data. Each ack sent by a receiver will contain a &lt;code&gt;rwnd&lt;&#x2F;code&gt; value that indicates how much room is left in the window, and the Sender should not send additional data to the Receiver if it exceeds this value (even if the Sender&#x27;s send buffer is not full). This allows the receiving host to add backpressure to the system to slow down the propagation of data through a network if it cannot keep up with the rate at which data is being sent.&lt;&#x2F;p&gt;
+&lt;p&gt;As an aside, this value is extremely valuable when troubleshooting issues with live applications, you can see it here in wireshark:
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery&#x2F;tcp_window.png&quot; alt=&quot;Where to find the rwnd in wireshark&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;And finally, we have the congestion window. The congestion window&#x27;s job is to provide backpressure when the network itself starts introducing problems. In practice, it does the same job as the receive window, but for different reasons. It is adjusted by the operating system based on the measured quality of the connection.&lt;&#x2F;p&gt;
+&lt;p&gt;These three windows decide how much data you can send over a TCP connection at any given moment. For instance, if:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;cwnd&lt;&#x2F;code&gt; = 64KiB&lt;&#x2F;li&gt;
+&lt;li&gt;&lt;code&gt;rwnd&lt;&#x2F;code&gt; = 48KiB&lt;&#x2F;li&gt;
+&lt;li&gt;bytes in flight = 30KiB&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;Then you can send &lt;code&gt;min(64, 48) - 30 = 18KiB&lt;&#x2F;code&gt; right now.&lt;&#x2F;p&gt;
+&lt;p&gt;So, now that we understand some of the basics, why does latency make this worse?&lt;&#x2F;p&gt;
+&lt;p&gt;Remember that on most systems, these window sizes are auto-tuned by the system. In fact, the backpressure and congestion control systems of TCP depend on their size being dynamic. The SEND -&amp;gt; ACK process allows each side of the conversation to discover things about the state of the sender, receiver, and connection between them. But, the quickest they can possibly discover this information is one round trip time &lt;em&gt;after&lt;&#x2F;em&gt; those changes occur. It&#x27;s a feedback system. And the higher the RTT, the slower the feedback, for both positive (link is underutilized) and negative (high packet loss conditions exist) conditions.&lt;&#x2F;p&gt;
+&lt;p&gt;Most algorithms governing this process of optimizing the congestion window additively increase, and multiplicative decrease the cwnd. This means that recovering from a previous loss event is especially punishing, because it takes longer to get back up to the maximum value than it does to go from max -&amp;gt; 0. This exacerbates how long it takes to recover from lossy conditions on high latency links. &lt;em&gt;Especially&lt;&#x2F;em&gt; once you are past the slow start threshold (depicted on this chart as a yellow line) &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#4&quot;&gt;4&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;&lt;&#x2F;p&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery&#x2F;ssh_latency_cwnd.png&quot; alt=&quot;Graph showing rate of cwnd increase for different link types&quot; &#x2F;&gt;
+&lt;p&gt;Which is all to say, a lossy link is bad for TCP. A high latency lossy link is absolutely terrible.&lt;&#x2F;p&gt;
+&lt;p&gt;For instance, let&#x27;s look at a 1 second 100% loss event on a 20ms network:&lt;&#x2F;p&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery&#x2F;tcp_outage.png&quot; alt=&quot;Graph showing recovery after an outage&quot; &#x2F;&gt;
+&lt;p&gt;1 second of loss is plenty long enough for the congestion window to clamp down to 0, delivery is completely halted. And then we spend a bit more than a second recovering to full bandwidth.&lt;&#x2F;p&gt;
+&lt;p&gt;Now let&#x27;s look at what this looks like when we go from 20ms to 200ms RTT:&lt;&#x2F;p&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery&#x2F;tcp_outage_geo_single.png&quot; alt=&quot;Graph showing the impact of a single outage on a high latency connection&quot; &#x2F;&gt;
+&lt;p&gt;We&#x27;ve recreated the same issue, the &lt;code&gt;cwnd&lt;&#x2F;code&gt; clamps to 0, but now recovery takes far longer: almost 3 seconds to get back to full throughput.&lt;&#x2F;p&gt;
+&lt;p&gt;Now, let&#x27;s imagine we have multiple loss events:&lt;&#x2F;p&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery&#x2F;tcp_outage_geo.png&quot; alt=&quot;Graph showing impact of multiple outages on a high latency connection&quot; &#x2F;&gt;
+&lt;p&gt;As you can see, small bursts of 100% loss can effectively cripple TCP with large latencies. We spend a lot of time with a perfectly good network barely sending any traffic because the congestion control feedback loop takes too long to ramp the connection back up between outages.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;when-tcp-gives-up-on-you&quot;&gt;When TCP Gives Up On You&lt;&#x2F;h2&gt;
+&lt;p&gt;If we plot the first 0-10% of loss of a connection with 20ms of latency, we wind up with a graph that has this general shape:  &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#8&quot;&gt;5&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery&#x2F;tcp_loss_throughput.png&quot; alt=&quot;Graph showing TCP Throughput versus packet loss. It is shaped like a backwards hockey stick&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;And the shape of this graph definitely shows the somewhat non-intuitive relationship between Throughput and Packet loss. The first 1% of loss immediately removed 80% of our throughput. Sit with that for a moment. A link that is 99% functional destroys four fifths of your bandwidth. And then it gets worse from there. At 2% loss we lose 90%. From that point on, our throughput is effectively zero. Until it gets to &lt;em&gt;actual&lt;&#x2F;em&gt; zero. And when that happens depends on, as you can probably guess, latency.&lt;&#x2F;p&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery&#x2F;tcp_breaking_point_combined.png&quot; alt=&quot;Graph showing when TCP connections at various latencies become nonfunctional&quot; &#x2F;&gt;
+&lt;p&gt;You might be wondering why the floor for every request at the bottom of a viable connection is .244 MB&#x2F;s. This is because TCP is hitting the minimum congestion window and gets throttled by the kernel&#x27;s minimum RTO. Once you hit this point, extra loss just causes more RTO-driven stalls, but since the throughput can&#x27;t get any lower, it just flatlines instead. &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#9&quot;&gt;6&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;when-you-give-up-on-tcp&quot;&gt;When You Give Up On TCP&lt;&#x2F;h2&gt;
+&lt;p&gt;If you absolutely must send data over a lossy, high latency link, you are going to need to abandon TCP and get creative.&lt;&#x2F;p&gt;
+&lt;p&gt;The main limitation of any reliable ordered delivery protocol such as TCP is that it must be polite to its neighbors. TCP must back off aggressively when congestion occurs. If it didn&#x27;t, a marginal link would immediately become a borderline useless one, because everyone would be a noisy neighbor. Additionally, to them, efficiency does matter a great deal. They won&#x27;t retransmit data until they know that they have to. Adding additional RTT to this process causes a great deal of pain, as we&#x27;ve previously explained.&lt;&#x2F;p&gt;
+&lt;p&gt;But if you absolutely need to guarantee delivery over a marginal link, what can you do? In most cases, you have to trade efficiency for reliability.&lt;&#x2F;p&gt;
+&lt;p&gt;Imagine the case where you need to get a control signal to a drone over a connection with 99% frame loss. It&#x27;s pretty obvious that in order to have any reasonable chance of delivering your message, you first need the data to be smaller than a single frame, and you must send at least 100 of them.&lt;&#x2F;p&gt;
+&lt;p&gt;And this is a valid way to handle this issue. If all you need to do is get one message through to the other end (Ideally a small one, like a &amp;quot;Return To Home&amp;quot; command), you can just saturate your entire bandwidth with one-way messages that don&#x27;t even need to get acked. They will get the message eventually as long as there is signal capture between the radios long enough to transmit a single frame. For cases where the link is degraded, but not entirely jammed, we can figure out the probability that a certain amount of duplication will result in a successful transmission:&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;Probability of Delivery&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Copies sent&lt;&#x2F;th&gt;&lt;th&gt;10% loss&lt;&#x2F;th&gt;&lt;th&gt;50% loss&lt;&#x2F;th&gt;&lt;th&gt;75% loss&lt;&#x2F;th&gt;&lt;th&gt;90% loss&lt;&#x2F;th&gt;&lt;th&gt;99% loss&lt;&#x2F;th&gt;&lt;&#x2F;tr&gt;&lt;&#x2F;thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;1&lt;&#x2F;td&gt;&lt;td&gt;90%&lt;&#x2F;td&gt;&lt;td&gt;50%&lt;&#x2F;td&gt;&lt;td&gt;25%&lt;&#x2F;td&gt;&lt;td&gt;10%&lt;&#x2F;td&gt;&lt;td&gt;1%&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;2&lt;&#x2F;td&gt;&lt;td&gt;99%&lt;&#x2F;td&gt;&lt;td&gt;75%&lt;&#x2F;td&gt;&lt;td&gt;44%&lt;&#x2F;td&gt;&lt;td&gt;19%&lt;&#x2F;td&gt;&lt;td&gt;2%&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;5&lt;&#x2F;td&gt;&lt;td&gt;&amp;gt;99.9%&lt;&#x2F;td&gt;&lt;td&gt;97%&lt;&#x2F;td&gt;&lt;td&gt;76%&lt;&#x2F;td&gt;&lt;td&gt;41%&lt;&#x2F;td&gt;&lt;td&gt;5%&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;10&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;&amp;gt;99.9%&lt;&#x2F;td&gt;&lt;td&gt;94%&lt;&#x2F;td&gt;&lt;td&gt;65%&lt;&#x2F;td&gt;&lt;td&gt;10%&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;25&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;&amp;gt;99.9%&lt;&#x2F;td&gt;&lt;td&gt;93%&lt;&#x2F;td&gt;&lt;td&gt;22%&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;50&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;~99.5%&lt;&#x2F;td&gt;&lt;td&gt;40%&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;100&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;63%&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;500&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;~100%&lt;&#x2F;td&gt;&lt;td&gt;99.3%&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;&#x2F;tbody&gt;&lt;&#x2F;table&gt;
+&lt;p&gt;If you &lt;em&gt;can&lt;&#x2F;em&gt; measure the loss level of your link a simple protocol could just select an appropriate amount of copies from this table. Of course, you still wouldn&#x27;t have a guaranteed or ordered delivery system. You could also have the receiving side of the connection send ACKs, but now you&#x27;ve given up a significant portion of your bandwidth to guarantee delivery of a message that you could just as effectively ensure by just repeating it ad infinitum until the connection quality increases.&lt;&#x2F;p&gt;
+&lt;p&gt;But let&#x27;s say you need to transmit more than one emergency message? Let&#x27;s say you have hundreds of sensors generating hundreds of telemetry messages that need to reach the other side? Is there any way you can make this more tolerant to loss while also ensuring some form of reliable ordered delivery?&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;buffer-stuffing-the-shotgun-approach&quot;&gt;Buffer Stuffing: The Shotgun Approach&lt;&#x2F;h2&gt;
+&lt;p&gt;In order for this strategy to work, we do have some constraints:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Our Maximum Transmission Unit (MTU) is usefully large &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#6&quot;&gt;7&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;We can fit multiple messages within our MTU (The more, the better)&lt;&#x2F;li&gt;
+&lt;li&gt;The underlying link has some kind of Forward Error Correction (FEC) &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#5&quot;&gt;8&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt; that can correct for mid-frame bit-flips &lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#7&quot;&gt;9&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;In this toy protocol, we have a &lt;code&gt;Message&lt;&#x2F;code&gt; type that can contain a collection of three different variants of &lt;code&gt;Commands&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#2b303b;color:#c0c5ce;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;use &lt;&#x2F;span&gt;&lt;span&gt;parity_scale_codec::{Decode, Encode};
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub const &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;MAX_MESSAGE_SIZE&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;usize &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;1500 &lt;&#x2F;span&gt;&lt;span&gt;- &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;48&lt;&#x2F;span&gt;&lt;span&gt;; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Roughly MTU minus worst case IPv6 UDP overhead.
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub const &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;MAX_PAYLOAD_LEN&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;usize &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;128&lt;&#x2F;span&gt;&lt;span&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Per-command encoded size: 1 (variant) + 4 (seq) + 2 (compact len) + 128 (payload) = 135
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Message vec prefix: 2 bytes (compact, since capacity &amp;gt; 63)
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub const &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;RING_BUF_CAPACITY&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;usize &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#d08770;&quot;&gt;MAX_MESSAGE_SIZE&lt;&#x2F;span&gt;&lt;span&gt;; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#65737e;&quot;&gt;&#x2F;&#x2F; Basically how much we can stuff in a single unsegmented datagram
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;#[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;derive&lt;&#x2F;span&gt;&lt;span&gt;(Debug, Clone, PartialEq, Encode, Decode)]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub enum &lt;&#x2F;span&gt;&lt;span&gt;Command {
+&lt;&#x2F;span&gt;&lt;span&gt;    Data { seq: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u32&lt;&#x2F;span&gt;&lt;span&gt;, payload: Vec&amp;lt;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u8&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt; },
+&lt;&#x2F;span&gt;&lt;span&gt;    Ack { seq: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u32 &lt;&#x2F;span&gt;&lt;span&gt;},
+&lt;&#x2F;span&gt;&lt;span&gt;    RetransmitRequest { seq: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;u32 &lt;&#x2F;span&gt;&lt;span&gt;},
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;#[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;derive&lt;&#x2F;span&gt;&lt;span&gt;(Debug, Clone, PartialEq, Encode, Decode)]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub struct &lt;&#x2F;span&gt;&lt;span&gt;Message {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#b48ead;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span style=&quot;color:#bf616a;&quot;&gt;commands&lt;&#x2F;span&gt;&lt;span&gt;: Vec&amp;lt;Command&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Every time the sender has a new command to send, it packages it into a &lt;code&gt;Message&lt;&#x2F;code&gt; together with the most recent W previously-sent (unacknowledged) commands from a ring buffer. The receiver treats each arriving message as a mini-recovery snapshot: any command it hasn&#x27;t seen yet gets buffered; any gap at the delivery frontier triggers an explicit retransmit request (NACK).&lt;&#x2F;p&gt;
+&lt;p&gt;Because recent commands appear in multiple consecutive outgoing messages, a transient loss rarely requires retransmission at all, since the lost packet&#x27;s data will simply arrive again inside the next message. In this way, the protocol is very inefficient when it comes to bandwidth, but what it buys us is the ability to skip the TCP-style feedback loop entirely, except in cases of extreme loss.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;theoretical-reliability&quot;&gt;Theoretical Reliability&lt;&#x2F;h3&gt;
+&lt;p&gt;With independent per-message loss probability &lt;strong&gt;p&lt;&#x2F;strong&gt;, a command that appears in &lt;strong&gt;W&lt;&#x2F;strong&gt; consecutive messages goes undelivered only if all W copies are dropped:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;P(undelivered passively) = p^W
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;For the worst case (128-byte payload, 1500 byte message, W = 10):&lt;&#x2F;p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Loss rate&lt;&#x2F;th&gt;&lt;th&gt;p¹⁰&lt;&#x2F;th&gt;&lt;th&gt;Failure rate&lt;&#x2F;th&gt;&lt;&#x2F;tr&gt;&lt;&#x2F;thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;1%&lt;&#x2F;td&gt;&lt;td&gt;10⁻²⁰&lt;&#x2F;td&gt;&lt;td&gt;Vanishingly small&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;5%&lt;&#x2F;td&gt;&lt;td&gt;9.8 × 10⁻¹⁴&lt;&#x2F;td&gt;&lt;td&gt;~1 per 10 trillion commands&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;10%&lt;&#x2F;td&gt;&lt;td&gt;10⁻¹⁰&lt;&#x2F;td&gt;&lt;td&gt;~1 per 10 billion&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;20%&lt;&#x2F;td&gt;&lt;td&gt;1.0 × 10⁻⁷&lt;&#x2F;td&gt;&lt;td&gt;~1 per 10 million&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;30%&lt;&#x2F;td&gt;&lt;td&gt;5.9 × 10⁻⁶&lt;&#x2F;td&gt;&lt;td&gt;~1 per 170,000&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;50%&lt;&#x2F;td&gt;&lt;td&gt;9.8 × 10⁻⁴&lt;&#x2F;td&gt;&lt;td&gt;~1 per 1,000&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;&#x2F;tbody&gt;&lt;&#x2F;table&gt;
+&lt;p&gt;At 30% loss, passive redundancy alone gives roughly 1 failure per 170,000 commands (in theory). The real-world numbers will look worse, and we&#x27;ll get to why shortly.&lt;&#x2F;p&gt;
+&lt;p&gt;Smaller payloads let you fit more copies per packet, pushing W higher. At 64-byte payloads, W doubles to 20:&lt;&#x2F;p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Loss rate p&lt;&#x2F;th&gt;&lt;th&gt;p²⁰&lt;&#x2F;th&gt;&lt;&#x2F;tr&gt;&lt;&#x2F;thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;10%&lt;&#x2F;td&gt;&lt;td&gt;10⁻²⁰&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;20%&lt;&#x2F;td&gt;&lt;td&gt;10⁻¹⁴&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;50%&lt;&#x2F;td&gt;&lt;td&gt;10⁻⁶&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;&#x2F;tbody&gt;&lt;&#x2F;table&gt;
+&lt;p&gt;These numbers assume uniform independent loss and, crucially, perfect ACK delivery — neither of which holds in practice. We&#x27;ll see exactly how that plays out in the benchmarks.&lt;&#x2F;p&gt;
+&lt;p&gt;The bandwidth cost scales directly with W, and W scales inversely with payload size. For a 1500-byte MTU, the numbers look like this:&lt;&#x2F;p&gt;
+&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Payload&lt;&#x2F;th&gt;&lt;th&gt;W&lt;&#x2F;th&gt;&lt;th&gt;Overhead&lt;&#x2F;th&gt;&lt;&#x2F;tr&gt;&lt;&#x2F;thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;128 B&lt;&#x2F;td&gt;&lt;td&gt;10&lt;&#x2F;td&gt;&lt;td&gt;10× bandwidth for the ring window&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;64 B&lt;&#x2F;td&gt;&lt;td&gt;20&lt;&#x2F;td&gt;&lt;td&gt;20× bandwidth&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;32 B&lt;&#x2F;td&gt;&lt;td&gt;37&lt;&#x2F;td&gt;&lt;td&gt;37× bandwidth&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;tr&gt;&lt;td&gt;16 B&lt;&#x2F;td&gt;&lt;td&gt;63&lt;&#x2F;td&gt;&lt;td&gt;63× bandwidth&lt;&#x2F;td&gt;&lt;&#x2F;tr&gt;
+&lt;&#x2F;tbody&gt;&lt;&#x2F;table&gt;
+&lt;p&gt;The smaller your payloads, the more copies fit per packet. This is great for reliability but punishing on bandwidth. At 16-byte payloads you get W=63, which is near-perfect reliability, but you&#x27;re sending 63× the raw data. Whether that&#x27;s acceptable depends entirely on how much bandwidth you have to spare.&lt;&#x2F;p&gt;
+&lt;p&gt;If bandwidth is constrained and loss rates are moderate, the RTO&#x2F;NACK path can be preferred by reducing W (use larger payloads) or by disabling passive redundancy entirely and relying solely on NACK-driven retransmission. Another option is dynamically adjusting this value from W=1 all the way up to your theoretical maximum based on perceived connection quality. But this adds a lot of complexity. And if you didn&#x27;t have the bandwidth to sustain high W on a clean link, a lossy one certainly isn&#x27;t going to give it to you.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;benchmarks&quot;&gt;Benchmarks&lt;&#x2F;h2&gt;
+&lt;p&gt;Piping our toy protocol through &lt;a href=&quot;https:&#x2F;&#x2F;crates.io&#x2F;crates&#x2F;badnet&quot;&gt;badnet&lt;&#x2F;a&gt;, we can simulate a lot of absolutely garbage links.&lt;&#x2F;p&gt;
+&lt;p&gt;Imagine a scenario where we have a geostationary satellite with about a 600ms RTT that is experiencing 30% packet loss:&lt;&#x2F;p&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery&#x2F;ring_600ms_30pl.png&quot; alt=&quot;Graph showing properties of the Ring toy protocol sending data over a terrible link&quot; &#x2F;&gt;
+&lt;p&gt;As you can see, we are sending about 900 &lt;code&gt;Commands&lt;&#x2F;code&gt; per second. Our MTU is 1500, and each command contains 16 bytes of payload (imagine a telemetry counter, or something similar). And I should point out, that TCP would not even function under these circumstances. At 20ms of latency, TCP stopped working at around 17% loss. This connection is &lt;em&gt;significantly&lt;&#x2F;em&gt; worse than that in regards to both packet loss and latency.&lt;&#x2F;p&gt;
+&lt;p&gt;With 300ms of delay in each direction, and a packet loss of 30% (10% more than the threshold for TCP becoming non-functional at a lower latency), our passive retransmission strategy allows for extremely reliable delivery:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;--- Summary ---
+&lt;&#x2F;span&gt;&lt;span&gt;Loss rate:             30.0%
+&lt;&#x2F;span&gt;&lt;span&gt;RTT (final est.):    500.00ms
+&lt;&#x2F;span&gt;&lt;span&gt;Commands sent:         10000
+&lt;&#x2F;span&gt;&lt;span&gt;Commands acked:        10000
+&lt;&#x2F;span&gt;&lt;span&gt;Commands delivered:    10000
+&lt;&#x2F;span&gt;&lt;span&gt;Total retransmits:        12
+&lt;&#x2F;span&gt;&lt;span&gt;OK  sent == acked == delivered
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;We only needed to retransmit 12 commands in total. The astute reader would notice that this is much worse than our theoretical loss probability as mentioned above, at 30% loss we should be having about 1 failure per 170,000 messages (versus the observed ~1 &#x2F; 1,000). The main reason for this is that we are not duplicating our ACKs. Since we are ack-ing every time we receive a new message, and our acks are cumulative, we usually send enough of them that losing 30% is not problematic mid-stream. The trouble is at the end of the transmission: once we stop receiving new messages, we stop ack-ing. If those final acks are lost, the sender mistakenly assumes the last bits of data were not delivered and the backup retransmission mechanism kicks in.&lt;&#x2F;p&gt;
+&lt;p&gt;You can see this more clearly if we crank the loss probability up even higher:&lt;&#x2F;p&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery&#x2F;ring_50p_loss.png&quot; alt=&quot;Graph showing properties of the Ring toy protocol sending data over a terrible link&quot; &#x2F;&gt;
+&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;--- Summary ---
+&lt;&#x2F;span&gt;&lt;span&gt;Loss rate:             50.0%
+&lt;&#x2F;span&gt;&lt;span&gt;RTT (final est.):    500.00ms
+&lt;&#x2F;span&gt;&lt;span&gt;Commands sent:         10000
+&lt;&#x2F;span&gt;&lt;span&gt;Commands acked:        10000
+&lt;&#x2F;span&gt;&lt;span&gt;Commands delivered:    10000
+&lt;&#x2F;span&gt;&lt;span&gt;Total retransmits:        27
+&lt;&#x2F;span&gt;&lt;span&gt;OK  sent == acked == delivered
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Despite the loss rate of 50%, our retransmissions mid-stream are nonexistent. However now the tail on the retransmit recovery at the end of the stream is longer, because now only half of our acks make it from the receiver to the transmitter. We could fix this by repeating the last ack at a fixed rate to ensure delivery, but considering this is a toy protocol I think it does a good enough job of demonstrating the concept for now.&lt;&#x2F;p&gt;
+&lt;p&gt;And, at the extremes, the protocol can still function. Here is an example of 600ms of latency and &lt;strong&gt;90%&lt;&#x2F;strong&gt; packet loss:&lt;&#x2F;p&gt;
+&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;reliable_delivery&#x2F;ring_90p_loss.png&quot; alt=&quot;Graph showing properties of the Ring toy protocol sending data over an atrocious link&quot; &#x2F;&gt;
+&lt;p&gt;As you can see, we are stalling quite frequently (whenever the window hits 100%, the sender will continually re-transmit the old buffer without adding new items to it until it starts getting acks again). And once again, it&#x27;s the acks that are the issue here. If we didn&#x27;t care about reliable delivery, and we were simply tossing the buffer out to the wind and letting what happens happen, the receiver would still succeed in receiving a lot of the commands. Which is definitely something to consider, especially if all you care about is the most recent state of a sensor as opposed to making sure you collect every observation on the remote side. But the most challenging version of this problem is reliable and ordered delivery, which is why I focused on that.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;protocol-spec&quot;&gt;Protocol Spec&lt;&#x2F;h2&gt;
+&lt;p&gt;If the benchmarks have you wondering exactly how the protocol achieves this, here is a more detailed breakdown of what the sender and receiver are actually doing.&lt;&#x2F;p&gt;
+&lt;h3 id=&quot;sender&quot;&gt;Sender&lt;&#x2F;h3&gt;
+&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;Sender state
+&lt;&#x2F;span&gt;&lt;span&gt;  ring:          Vec&amp;lt;Option&amp;lt;Command&amp;gt;&amp;gt;  &#x2F;&#x2F; circular array of RING_BUF_CAPACITY slots
+&lt;&#x2F;span&gt;&lt;span&gt;  ring_head_seq: u32                   &#x2F;&#x2F; oldest slot still occupied
+&lt;&#x2F;span&gt;&lt;span&gt;  next_seq:      u32                   &#x2F;&#x2F; next sequence number to assign
+&lt;&#x2F;span&gt;&lt;span&gt;  unacked:       HashMap&amp;lt;u32, (Command, Instant)&amp;gt;
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;On &lt;code&gt;push_command(payload)&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;Assign &lt;code&gt;seq = next_seq++&lt;&#x2F;code&gt; and store the command in &lt;code&gt;ring[seq % RING_BUF_CAPACITY]&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;li&gt;If the slot was already occupied (ring wrapped around), evict the old command and advance &lt;code&gt;ring_head_seq&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;li&gt;Compute how many commands fit in one datagram:&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;per_cmd  = 1 (variant) + 4 (seq) + 2 (compact length) + payload.len()
+&lt;&#x2F;span&gt;&lt;span&gt;max_cmds = (MAX_MESSAGE_SIZE − 2) &#x2F; per_cmd
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;Build a snapshot from &lt;code&gt;max(ring_head_seq, seq − max_cmds + 1)&lt;&#x2F;code&gt; through &lt;code&gt;seq&lt;&#x2F;code&gt; inclusive.&lt;&#x2F;li&gt;
+&lt;li&gt;Return the &lt;code&gt;Message&lt;&#x2F;code&gt;; the transport layer sends it as a single UDP datagram.&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;p&gt;On &lt;code&gt;handle_ack(seq)&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Remove all commands with sequence number ≤ &lt;code&gt;seq&lt;&#x2F;code&gt; from &lt;code&gt;unacked&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;li&gt;Return the RTT sample for &lt;code&gt;seq&lt;&#x2F;code&gt; (time since last send).&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;On &lt;code&gt;handle_nacks(responses)&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;For each &lt;code&gt;RetransmitRequest { seq }&lt;&#x2F;code&gt;, look up the command in &lt;code&gt;unacked&lt;&#x2F;code&gt;, reset its send timestamp, and include it in a retransmit &lt;code&gt;Message&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;On &lt;code&gt;retransmit_aged(threshold)&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Find all &lt;code&gt;unacked&lt;&#x2F;code&gt; commands whose last-send timestamp is older than &lt;code&gt;threshold&lt;&#x2F;code&gt; (typically 1.5× smoothed RTT).&lt;&#x2F;li&gt;
+&lt;li&gt;Package the oldest &lt;code&gt;max_cmds&lt;&#x2F;code&gt; of them into a single &lt;code&gt;Message&lt;&#x2F;code&gt; and reset their timestamps.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;h3 id=&quot;receiver&quot;&gt;Receiver&lt;&#x2F;h3&gt;
+&lt;pre style=&quot;background-color:#2b303b;color:#c0c5ce;&quot;&gt;&lt;code&gt;&lt;span&gt;Receiver state
+&lt;&#x2F;span&gt;&lt;span&gt;  next_to_deliver: u32                  &#x2F;&#x2F; highest contiguous seq delivered so far + 1
+&lt;&#x2F;span&gt;&lt;span&gt;  buffer:          HashMap&amp;lt;u32, Vec&amp;lt;u8&amp;gt;&amp;gt; &#x2F;&#x2F; out-of-order data awaiting gap fill
+&lt;&#x2F;span&gt;&lt;span&gt;  highest_seen:    Option&amp;lt;u32&amp;gt;          &#x2F;&#x2F; furthest-ahead seq received
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;On &lt;code&gt;handle_message(msg)&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;For each &lt;code&gt;Data { seq, payload }&lt;&#x2F;code&gt; in the message:
+&lt;ul&gt;
+&lt;li&gt;Skip if &lt;code&gt;seq &amp;lt; next_to_deliver&lt;&#x2F;code&gt; (already delivered).&lt;&#x2F;li&gt;
+&lt;li&gt;Skip if already buffered.&lt;&#x2F;li&gt;
+&lt;li&gt;Otherwise, insert into &lt;code&gt;buffer&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;Drain &lt;code&gt;buffer&lt;&#x2F;code&gt; contiguously starting at &lt;code&gt;next_to_deliver&lt;&#x2F;code&gt;, advancing the delivery frontier.&lt;&#x2F;li&gt;
+&lt;li&gt;Emit one &lt;code&gt;Ack { seq: next_to_deliver − 1 }&lt;&#x2F;code&gt; (cumulative acknowledgment).&lt;&#x2F;li&gt;
+&lt;li&gt;Emit one &lt;code&gt;RetransmitRequest { seq }&lt;&#x2F;code&gt; for each gap between the frontier and &lt;code&gt;highest_seen&lt;&#x2F;code&gt;.&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;h2 id=&quot;prior-art&quot;&gt;Prior Art&lt;&#x2F;h2&gt;
+&lt;p&gt;This isn&#x27;t a novel idea. Redundant UDP delivery is a well-worn strategy, particularly in game networking, where low latency matters more than the guarantees TCP provides.&lt;&#x2F;p&gt;
+&lt;p&gt;The classic articulation of this is the Tribes Networking Model, described by Mark Frohnmayer and Tim Gift in 2000. Tribes stuffed guaranteed and non-guaranteed messages together into every outgoing packet, using a similar philosophy: cheap redundancy beats expensive retransmission on marginal links.&lt;&#x2F;p&gt;
+&lt;p&gt;Modern game engines follow the same playbook. Valve&#x27;s Steam Datagram Relay and ENet (used in countless indie titles) both implement reliable-over-UDP layers with redundant transmission. Glenn Fiedler&#x27;s writing on game networking is probably the most cited resource on the topic and is worth reading if this post piqued your interest.&lt;&#x2F;p&gt;
+&lt;p&gt;It also shows up outside of games. VoIP and WebRTC use &lt;a href=&quot;https:&#x2F;&#x2F;datatracker.ietf.org&#x2F;doc&#x2F;html&#x2F;rfc2198&quot;&gt;RFC 2198&lt;&#x2F;a&gt;, a redundancy extension for RTP that piggybacks the previous audio frame onto the current packet — so a single lost packet doesn&#x27;t produce an audible gap on the other end. Same core idea: accept the bandwidth overhead, eliminate the retransmit round-trip.&lt;&#x2F;p&gt;
+&lt;p&gt;The version here is deliberately minimal. Real implementations add packet pacing, more nuanced NACK strategies, and dynamic W adjustment. But the core mechanic is the same: use your spare bandwidth to make loss someone else&#x27;s problem.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;summary&quot;&gt;Summary&lt;&#x2F;h2&gt;
+&lt;p&gt;TCP is an engineering marvel optimized for the common case: a congested internet where backing off is the polite and correct thing to do. But politeness is a liability when the link itself is the problem. High packet loss triggers congestion control, congestion control shrinks the window, and on a high-latency link the slow recovery from that shrink effectively kills your throughput.&lt;&#x2F;p&gt;
+&lt;p&gt;The core insight here is that you have to trade bandwidth for reliability. How you make that trade depends on what you&#x27;re sending:&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;One critical message&lt;&#x2F;strong&gt;: just repeat it. Sending 10 copies at 30% loss gives you a failure probability around 1 in 170,000. Sending 25 copies at 90% loss still gets you to 93%. No ACKs, no state, no RTT tax. Just keep repeating it until the link improves, or you have a different message to send.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;A stream of small messages&lt;&#x2F;strong&gt;: stuff the recent history into every outgoing packet. A command that rides along in W consecutive messages goes undelivered only if all W are dropped, a p^W event. At 30% loss with W=10, that&#x27;s roughly 1 failure per 170,000 commands, and in practice the benchmarks show almost no mid-stream retransmissions at all even at 50% loss on a 600ms link.&lt;&#x2F;p&gt;
+&lt;p&gt;The catch is overhead. W=10 means you&#x27;re sending 10× the raw data. If your payloads are small, W climbs quickly. At an MTU of 1500: 16-byte payloads give you W=63, which is excellent for reliability but expensive on a bandwidth-constrained link. The right operating point depends on your payload size, your loss rate, and whether you can afford the retransmit latency of falling back to NACK-driven recovery.&lt;&#x2F;p&gt;
+&lt;p&gt;None of this is magic. It&#x27;s just the math of independent tries working in your favor, plus the observation that some &amp;quot;reliable delivery&amp;quot; problems can be solved by not being stingy with spare bandwidth. Larger byte streams such as firmware updates are a different problem entirely, and one we look at next, in &lt;a href=&quot;https:&#x2F;&#x2F;blog.graysonhead.net&#x2F;posts&#x2F;reliable-delivery-part-2&#x2F;&quot;&gt;Reliable Delivery Over Horrible Networks: Erasure Codes&lt;&#x2F;a&gt;.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;1&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;1&lt;&#x2F;sup&gt;
+&lt;p&gt;Explicit Congestion Notifications are probably better, but that is another topic entirely.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;2&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;2&lt;&#x2F;sup&gt;
+&lt;p&gt;Except when any kind of segmentation occurs.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;3&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;3&lt;&#x2F;sup&gt;
+&lt;p&gt;For the purposes of brevity, I&#x27;m going to gloss over the fact that the send buffer and send window are different things and are usually not exactly the same size.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;4&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;4&lt;&#x2F;sup&gt;
+&lt;p&gt;Slow start is a system to...ironically...make scaling up the cwnd faster on new or recovering connections. Once the system is out of slow start and the regular congestion control algorithm takes over, the growth in the cwnd slows significantly on connections with higher RTTs. There are many alternate algorithms and different tunings to reduce the impact of this, but they often have sharp edges and are not the default on most systems and platforms.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;8&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;5&lt;&#x2F;sup&gt;
+&lt;p&gt;If you repeat these experiments on a different computer on the local loopback using TC for traffic disruption as I have done here, you might note that the total throughput will likely change due to differences in memory bandwidth and such, but the important thing to pay attention to about these graphs is the general shape of them, which won&#x27;t change. Nor will the cutoff for when it ceases to function (latency being equal).&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;9&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;6&lt;&#x2F;sup&gt;
+&lt;p&gt;I&#x27;m also very sorry for sneaking a logarithmically scaled graph in here.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;6&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;7&lt;&#x2F;sup&gt;
+&lt;p&gt;Definitely not the case with any VHF radios. Many non-commercial UHF radios used for applications like Ardupilot tend to be around 128-512 bytes which is big enough that this &lt;em&gt;might&lt;&#x2F;em&gt; be practical. It&#x27;s probably more useful for high end IP based systems like Ethernet-bridging radios where the MTU approaches what you might normally see over public internet links (~1500 bytes).&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;5&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;8&lt;&#x2F;sup&gt;
+&lt;p&gt;Foreshadowing :)&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;7&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;9&lt;&#x2F;sup&gt;
+&lt;p&gt;Otherwise we would need to optimize this system in the other direction: make the frames as small as possible, and send them more frequently.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+</content>
+        
+    </entry>
+</feed>
