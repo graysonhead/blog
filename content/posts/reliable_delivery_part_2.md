@@ -348,4 +348,5 @@ And, of course, there are also solutions for that. But we will have to talk abou
 <br>
 <br>
 <br>
+
 [^1]: And until recently, CPUs were not great at doing multiplication and division in a Galois field, which made this significantly worse.
