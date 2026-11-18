@@ -1,0 +1,30 @@
+# Plain-language explanations for the /logbook totals, shown when a visitor
+# hovers or taps a label. Keys must match MyFlightbook's labels exactly as
+# they appear on the page; a label with no entry here just has no tooltip.
+
+[terms]
+"Flights" = "Number of separate flights entered in the logbook."
+"Total Time" = "All logged flight time, counted from when the airplane first moves under its own power to fly until it comes to a stop after landing."
+"Cross Country" = "Flights that land somewhere other than where they took off. Most pilot certificate requirements only count trips that land at least 50 nautical miles (about 58 statute miles) away."
+"Night" = "Time flown between the end of evening twilight and the start of morning twilight, roughly 30 minutes after sunset to 30 minutes before sunrise."
+"Instrument Time" = "Flying by reference to the instruments alone, without looking outside. It's either actual (inside a cloud) or simulated (wearing a view-limiting hood in clear weather)."
+"Simulated Instrument" = "Instrument practice in good weather, wearing a hood or glasses that block the view outside so only the instrument panel is visible. An instructor or safety pilot watches for traffic."
+"Actual Instrument" = "Instrument flying in real clouds or poor visibility, where there is nothing to see outside."
+"IMC" = "Instrument meteorological conditions: flying in clouds or visibility too poor to navigate by looking outside."
+"Dual Received" = "Flight training received from a certified flight instructor on board the airplane."
+"PIC" = "Pilot in command: time as the pilot responsible for the flight."
+"Solo" = "Time as the only person on board the airplane."
+"SIC" = "Second in command: time as the co-pilot on an aircraft or operation that requires two pilots."
+"Landings" = "Total landings, including touch-and-goes where the airplane lands and takes right back off."
+"Approaches" = "Instrument approaches: published procedures for descending toward a runway using navigation equipment when it can't be seen from far out."
+"Ground Simulator" = "Time in a flight simulator or training device on the ground. Some of it can count toward certificate requirements."
+"ASEL" = "Airplane, single-engine, land: airplanes with one engine that operate from runways (as opposed to seaplanes or multi-engine airplanes)."
+"AMEL" = "Airplane, multi-engine, land: airplanes with two or more engines that operate from runways."
+"ASES" = "Airplane, single-engine, sea: single-engine seaplanes and floatplanes."
+"AMES" = "Airplane, multi-engine, sea: multi-engine seaplanes."
+"TAA (Technically Advanced Airplane)" = "An airplane with a glass cockpit: an electronic primary flight display, a moving-map GPS display, and a two-axis autopilot."
+"TAA (Technically Advanced Airplane) - PIC" = "Pilot-in-command time in a technically advanced airplane."
+"Complex" = "An airplane with retractable landing gear, flaps, and a controllable-pitch propeller."
+"High Performance" = "An airplane with an engine of more than 200 horsepower. Flying one requires a one-time instructor sign-off."
+"Takeoffs - Night" = "Takeoffs made at night. Carrying passengers at night requires three takeoffs and three full-stop landings at night within the previous 90 days."
+"Landings - Night" = "Full-stop landings made at night. Carrying passengers at night requires three of them within the previous 90 days."

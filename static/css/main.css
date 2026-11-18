@@ -63,6 +63,20 @@ blockquote {
     padding-left: 1em;
 }
 
+/* {% notes() %} asides */
+.notes {
+    margin: 1.5em 0;
+    padding: 0.75em 1em;
+    border: 1px solid rgba(128, 128, 128, 0.35);
+    border-left: 4px solid var(--maincolor);
+    border-radius: 4px;
+    background: rgba(128, 128, 128, 0.08);
+    font-size: 0.95em;
+}
+
+.notes > :first-child { margin-top: 0; }
+.notes > :last-child { margin-bottom: 0; }
+
 a {
     border-bottom: 3px solid var(--maincolor);
     color: inherit;

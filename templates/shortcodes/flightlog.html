@@ -1,0 +1,98 @@
+{#- Flight telemetry figure: stats, ground track map, and altitude/groundspeed
+    profile. Usage in a post (with `[extra] applet = true`):
+
+      {{ flightlog(flight=35244538, tz="America/Chicago") }}
+      {{ flightlog(src="2026-10-14-kxyz.kmz", title="KXYZ to KABC") }}
+
+    `flight` is a MyFlightbook flight ID (`scripts/mfb_sync.py flights` lists
+    them). `mfb_sync.py flight ID` (or `sync`, which fetches any referenced
+    flight that's missing) snapshots its track and logbook fields into
+    static/data/flights/mfb-ID.{gpx,json}; the logged details render here at
+    build time, and the track is drawn in the browser.
+
+    `src` is a .gpx, .kml or .kmz of your own in static/data/flights/
+    (MyFlightbook's GPX and KML exports both work as-is). The track file is
+    published (the browser has to fetch it) but not linked from the figure.
+
+    The departure METAR (the last report before takeoff, from the Iowa
+    Environmental Mesonet archive) is added to the snapshot by the sync and
+    shown under the logbook row when one was found.
+
+    Annotations: use the block form and list them in the body, one per line.
+    Times are local to `tz` (or end them with Z for UTC); a range marks a
+    maneuver, a single time a moment. The middle field is the key, which a
+    post links to with {{ mark(key="engine", text="...") }}; leave it out
+    to derive one from the label.
+
+      {% flightlog(flight=35333596, tz="America/Chicago") %}
+      09:40          | engine | Engine failure
+      09:44-09:51    | turns  | Turns around a point | max-alt avg-alt gs-dev
+      {% end %}
+
+    The optional last field turns on per-range stats, any of: start-alt, max-alt,
+    avg-alt (time-weighted), gs-dev (largest groundspeed swing from the
+    range's average), alt-dev (largest altitude swing from the range's
+    time-weighted average). Altitudes are GPS MSL; groundspeed includes wind.
+
+    `title` overrides the heading (for `flight`, it defaults to date, route
+    and tail). `tz` is an IANA zone for displayed times; without it, times
+    are shown in UTC. -#}
+{%- set mfb = false -%}
+{%- if flight -%}
+  {%- set mfb = load_data(path="static/data/flights/mfb-" ~ flight ~ ".json", required=false) -%}
+  {%- set file = "mfb-" ~ flight ~ ".gpx" -%}
+{%- else -%}
+  {%- set file = src -%}
+{%- endif -%}
+{%- set url = get_url(path="data/flights/" ~ file) -%}
+{%- set has_track = true -%}
+{%- if flight -%}
+  {%- set has_track = false -%}
+  {%- if mfb -%}{%- if mfb.telemetry -%}{%- set has_track = true -%}{%- endif -%}{%- endif -%}
+{%- endif -%}
+{%- set heading = "" -%}
+{%- if title -%}
+  {%- set heading = title -%}
+{%- elif mfb -%}
+  {%- set heading = mfb.date ~ " · " ~ mfb.route ~ " · " ~ mfb.tail -%}
+{%- endif -%}
+<figure class="applet flightlog" data-applet="flightlog"
+  {%- if has_track %} data-src="{{ url }}"{% endif %}
+  {%- if title %} data-title="{{ title }}"{% endif %}
+  {%- if tz %} data-tz="{{ tz }}"{% endif %}>
+  {%- if body %}
+  <script type="text/plain" class="flightlog__marks-src">{{ body | replace(from="</", to="<\/") | safe }}</script>
+  {%- endif %}
+  <div class="flightlog__head">
+    <span class="flightlog__title">{{ heading }}</span>
+  </div>
+  {%- if flight and not mfb %}
+  <p class="applet__error">MyFlightbook flight {{ flight }} hasn't been fetched yet. Run <code>scripts/mfb_sync.py flight {{ flight }}</code>.</p>
+  {%- endif %}
+  {%- if mfb %}
+  <dl class="applet__stats flightlog__logbook">
+    <div><dt>Aircraft</dt><dd>{{ mfb.tail }} <span class="flightlog__dim">{{ mfb.model }}</span></dd></div>
+    {%- for s in mfb.stats %}
+    <div><dt>{{ s.label }}</dt><dd>{{ s.display }}{% if s.kind == "time" %} h{% endif %}</dd></div>
+    {%- endfor %}
+  </dl>
+  {%- if mfb.metar %}
+  <div class="flightlog__metar">
+    <span class="flightlog__metar-label">Departure weather, {{ mfb.metar.station }}</span>
+    <code>{{ mfb.metar.raw }}</code>
+  </div>
+  {%- endif %}
+  {%- endif %}
+  {%- if has_track %}
+  <dl class="applet__stats flightlog__stats"></dl>
+  <div class="flightlog__map" role="img" aria-label="Ground track map"></div>
+  <div class="flightlog__profile"></div>
+  <p class="applet__error flightlog__error" hidden></p>
+  <noscript><p>This flight's map and profile need JavaScript.</p></noscript>
+  {%- elif mfb %}
+  <p class="flightlog__dim">No telemetry was recorded for this flight.</p>
+  {%- endif %}
+</figure>
+{%- if has_track %}
+<script type="module" src="{{ get_url(path="js/apps/flightlog/flightlog.js") }}"></script>
+{%- endif %}

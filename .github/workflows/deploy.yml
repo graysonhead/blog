@@ -1,15 +1,59 @@
-# On every push this script is executed
-on: push
+# Builds and deploys on every push to main, daily (to pick up new logbook
+# totals from MyFlightbook), and on demand from the Actions tab.
+on:
+  push:
+  schedule:
+    - cron: "0 11 * * *"
+  workflow_dispatch:
 name: Build and deploy GH Pages
+concurrency:
+  group: deploy
+  cancel-in-progress: false
 jobs:
   build:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+    # Pushes gh-pages, and commits refreshed logbook data back to main.
+    permissions:
+      contents: write
     steps:
       - name: checkout
         uses: actions/checkout@v3.0.0
         with:
           submodules: 'true'
+      # Refreshes static/data/logbook/ (totals, aircraft, photos) for /logbook. If MyFlightbook
+      # is down or the token is revoked, the build continues with the
+      # committed copy instead of failing the deploy.
+      - name: sync_logbook_totals
+        id: sync
+        continue-on-error: true
+        run: python3 scripts/mfb_sync.py sync
+        env:
+          MFB_CLIENT_ID: ${{ secrets.MFB_CLIENT_ID }}
+          MFB_CLIENT_SECRET: ${{ secrets.MFB_CLIENT_SECRET }}
+          MFB_REFRESH_TOKEN: ${{ secrets.MFB_REFRESH_TOKEN }}
+      # Commits what the sync changed back to main, so the repo's fallback
+      # copy stays current. Every sync rewrites the "fetched" timestamps, so
+      # a run where nothing else changed commits nothing. Pushes made with
+      # GITHUB_TOKEN don't trigger another workflow run. If this fails (say a
+      # push landed mid-run), the deploy still goes ahead.
+      - name: commit_logbook_data
+        if: steps.sync.outcome == 'success'
+        continue-on-error: true
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A static/data
+          if [ -d static/images/logbook/aircraft/auto ]; then git add -A static/images/logbook/aircraft/auto; fi
+          other=$(git diff --cached --name-only -- ':(exclude)*.json')
+          data=$(git diff --cached -U0 -- '*.json' | grep -E '^[+-][^+-]' | grep -v '"fetched"' || true)
+          if [ -z "$other$data" ]; then
+            echo "Only sync timestamps changed; nothing to commit."
+            exit 0
+          fi
+          git commit -m "Update logbook data from MyFlightbook"
+          git pull --rebase origin main
+          git push origin HEAD:main
       - name: build_and_deploy
         uses: shalzz/zola-deploy-action@v0.17.2
         env:

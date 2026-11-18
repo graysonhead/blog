@@ -1,0 +1,171 @@
+{% extends "index.html" %}
+
+{#- Logbook page. Data comes from static/data/logbook/, written by
+    `scripts/mfb_sync.py sync`:
+      totals.json    MyFlightbook totals. The "core" group (total time,
+                     flights, PIC, ...) becomes stat tiles; every other
+                     group becomes a table at the bottom.
+      aircraft.json  Hours by type and by tail, built from the flight list,
+                     plus each aircraft's photo: images/logbook/aircraft/overrides/<TAIL>.*
+                     if present, else the MyFlightbook photo in auto/.
+      data/logbook-glossary.toml
+                     Plain-language explanations of the totals' labels,
+                     shown as tooltips (hover, tap or keyboard focus).
+    Everything is rendered at build time; the only script is the one at the
+    bottom that keeps glossary tooltips on screen. -#}
+
+{%- macro hours(display) -%}
+{{ display }}<span class="logbook__unit">h</span>
+{%- endmacro hours -%}
+
+{#- A total's label, with its glossary explanation as a tooltip when there
+    is one. Focusable so it opens on tap and from the keyboard too. -#}
+{%- macro term(label, terms) -%}
+{%- set_global tip = "" -%}
+{%- if terms -%}{%- for k, v in terms -%}{%- if k == label -%}{%- set_global tip = v -%}{%- endif -%}{%- endfor -%}{%- endif -%}
+{%- if tip -%}
+<span class="logbook__term" tabindex="0">{{ label }}<span class="logbook__tip" role="tooltip">{{ tip }}</span></span>
+{%- else -%}
+{{ label }}
+{%- endif -%}
+{%- endmacro term -%}
+
+{% block main_content %}
+{%- set data = load_data(path="static/data/logbook/totals.json", required=false) -%}
+{%- set fleet = load_data(path="static/data/logbook/aircraft.json", required=false) -%}
+{%- set glossary = load_data(path="data/logbook-glossary.toml", required=false) -%}
+{%- set terms = false -%}
+{%- if glossary -%}{%- set terms = glossary.terms -%}{%- endif -%}
+<main>
+  <article>
+    <div class="title">
+      <h1 class="title">{{ section.title }}</h1>
+    </div>
+
+    <section class="body">
+      {{ section.content | safe }}
+
+      {%- if not data %}
+      <p><em>No logbook data yet. Run <code>scripts/mfb_sync.py sync</code> to fetch it.</em></p>
+      {%- else %}
+
+      {#- Headline tiles -#}
+      {%- for group in data.groups | filter(attribute="key", value="core") %}
+      <div class="applet logbook">
+        <dl class="logbook__tiles">
+          {%- for item in group.items %}
+          <div class="logbook__tile">
+            <dt>{{ self::term(label=item.label, terms=terms) }}</dt>
+            <dd>{% if item.kind == "time" %}{{ self::hours(display=item.display) }}{% else %}{{ item.display }}{% endif %}
+              {%- if item.sub %}<span class="logbook__sub">{{ item.sub }}</span>{% endif %}</dd>
+          </div>
+          {%- endfor %}
+        </dl>
+      </div>
+      {%- endfor %}
+
+      {%- if fleet and fleet.aircraft %}
+      {%- set top = fleet.aircraft | first %}
+      <h2>Most flown</h2>
+      <div class="applet logbook logbook__hero">
+        {%- if top.image %}
+        <figure class="logbook__photo">
+          <img src="{{ get_url(path=top.image) }}" alt="{{ top.tail }}, a {{ top.name }}" loading="lazy">
+          {%- if top.credit %}<figcaption>{{ top.credit }}</figcaption>{% endif %}
+        </figure>
+        {%- endif %}
+        <div class="logbook__hero-body">
+          <div class="logbook__tail">{{ top.tail }}</div>
+          <div class="logbook__model">{{ top.name }} <span class="logbook__sub logbook__sub--inline">{{ top.model }}</span></div>
+          <dl class="logbook__tiles logbook__tiles--compact">
+            <div class="logbook__tile"><dt>Time</dt><dd>{{ self::hours(display=top.display) }}</dd></div>
+            <div class="logbook__tile"><dt>Flights</dt><dd>{{ top.flights }}</dd></div>
+            <div class="logbook__tile"><dt>Landings</dt><dd>{{ top.landings }}</dd></div>
+            <div class="logbook__tile"><dt>Last flown</dt><dd>{{ top.last }}</dd></div>
+          </dl>
+        </div>
+      </div>
+
+      <h2>By aircraft type</h2>
+      <div class="applet logbook">
+        <table class="logbook__table">
+          <thead><tr><th scope="col">Type</th><th scope="col">Tails</th><th scope="col">Flights</th><th scope="col">Time</th></tr></thead>
+          <tbody>
+            {%- for t in fleet.types %}
+            <tr>
+              <th scope="row">{{ t.model }}<span class="logbook__sub">{{ t.names | join(sep=", ") }}</span></th>
+              <td>{{ t.tails }}</td>
+              <td>{{ t.flights }}</td>
+              <td>{{ self::hours(display=t.display) }}</td>
+            </tr>
+            {%- endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <h2>By aircraft</h2>
+      <div class="applet logbook">
+        <table class="logbook__table logbook__table--fleet">
+          <thead><tr><th scope="col">Aircraft</th><th scope="col">Flights</th><th scope="col">Last flown</th><th scope="col">Time</th></tr></thead>
+          <tbody>
+            {%- for a in fleet.aircraft %}
+            <tr>
+              <th scope="row"><div class="logbook__aircraft">
+                {%- if a.image %}<img class="logbook__thumb" src="{{ get_url(path=a.image) }}" alt="" loading="lazy">{% endif -%}
+                <span>{{ a.tail }}<span class="logbook__sub">{{ a.name }}</span></span>
+              </div></th>
+              <td>{{ a.flights }}</td>
+              <td>{{ a.last }}</td>
+              <td>{{ self::hours(display=a.display) }}</td>
+            </tr>
+            {%- endfor %}
+          </tbody>
+        </table>
+      </div>
+      {%- endif %}
+
+      {#- Remaining totals groups -#}
+      {%- for group in data.groups %}
+      {%- if group.key != "core" %}
+      <h2>{{ group.name }}</h2>
+      <div class="applet logbook">
+        <table class="logbook__table">
+          <tbody>
+            {%- for item in group.items %}
+            <tr>
+              <th scope="row">{{ self::term(label=item.label, terms=terms) }}{% if item.sub %}<span class="logbook__sub">{{ item.sub }}</span>{% endif %}</th>
+              <td>{% if item.kind == "time" %}{{ self::hours(display=item.display) }}{% else %}{{ item.display }}{% endif %}</td>
+            </tr>
+            {%- endfor %}
+          </tbody>
+        </table>
+      </div>
+      {%- endif %}
+      {%- endfor %}
+
+      <div class="meta">
+        Totals from {{ data.source }}, updated {{ data.fetched | date(format="%Y-%m-%d") }}
+      </div>
+      {%- endif %}
+    </section>
+  </article>
+</main>
+<script>
+  // Shift each glossary tooltip sideways as it opens so it stays inside the
+  // viewport, whatever column its label landed in. Listening for these
+  // events also makes iOS treat a tap on a label as a hover.
+  for (const term of document.querySelectorAll(".logbook__term")) {
+    const tip = term.querySelector(".logbook__tip");
+    const place = () => {
+      tip.style.left = "0px";
+      const r = tip.getBoundingClientRect(), pad = 8, vw = document.documentElement.clientWidth;
+      let dx = 0;
+      if (r.right > vw - pad) dx = vw - pad - r.right;
+      if (r.left + dx < pad) dx = pad - r.left;
+      tip.style.left = `${dx}px`;
+    };
+    term.addEventListener("mouseenter", place);
+    term.addEventListener("focus", place);
+  }
+</script>
+{% endblock main_content %}

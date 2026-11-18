@@ -1,3 +1,9 @@
+{#- A boxed aside, set apart from the post's prose. Usage:
+
+      {% notes() %}
+      Any **Markdown** here.
+      {% end %}
+-#}
 <div class="notes">
-	{{ body }}
+{{ body | markdown | safe }}
 </div>

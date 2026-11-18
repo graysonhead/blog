@@ -1,0 +1,10 @@
+{#- Inline link to a flightlog annotation on the same page:
+
+      Then he {{ mark(key="engine", text="failed the engine") }}.
+
+    Clicking it scrolls to the flight's map and zooms to that annotation. A
+    shortcode rather than a Markdown [text](#engine) link because Zola's link
+    checker can't see annotation ids (the legend is built by JavaScript) and
+    would fail the build. -#}
+<a class="flightlog__marklink" href="#{{ key }}">{{ text }}</a>
+{#- no trailing newline, so punctuation right after the shortcode stays attached -#}

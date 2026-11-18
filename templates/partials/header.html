@@ -95,7 +95,11 @@
 
     {# Page-scoped stylesheet for interactive applets. Set `[extra] applet = true` #}
     {# in a page's front matter to opt in; keeps applets.css off pages that don't need it. #}
-    {% if page.extra.applet %}
+    {#- Pages and sections (e.g. /logbook) can both opt in. #}
+    {%- set applet_on = false %}
+    {%- if page is defined %}{% set applet_on = page.extra.applet | default(value=false) %}
+    {%- elif section is defined %}{% set applet_on = section.extra.applet | default(value=false) %}{% endif %}
+    {% if applet_on %}
     <link rel="stylesheet" type="text/css" href="{{ get_url(path="css/applets.css") }}" />
     {% endif %}
 

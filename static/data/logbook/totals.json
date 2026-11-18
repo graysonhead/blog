@@ -1,0 +1,114 @@
+{
+  "fetched": "2026-11-17T03:54:02Z",
+  "source": "MyFlightbook",
+  "groups": [
+    {
+      "key": "core",
+      "name": "Standard Logbook Times",
+      "items": [
+        {
+          "label": "Flights",
+          "sub": "",
+          "kind": "int",
+          "value": 31.0,
+          "display": "31"
+        },
+        {
+          "label": "Total Time",
+          "sub": "",
+          "kind": "time",
+          "value": 40.0,
+          "display": "40.0"
+        },
+        {
+          "label": "Cross Country",
+          "sub": "",
+          "kind": "time",
+          "value": 5.0,
+          "display": "5.0"
+        },
+        {
+          "label": "Night",
+          "sub": "",
+          "kind": "time",
+          "value": 3.6,
+          "display": "3.6"
+        },
+        {
+          "label": "Instrument Time",
+          "sub": "(=0.0 Actual + 1.0 Simulated)",
+          "kind": "time",
+          "value": 1.0,
+          "display": "1.0"
+        },
+        {
+          "label": "Simulated Instrument",
+          "sub": "",
+          "kind": "time",
+          "value": 1.0,
+          "display": "1.0"
+        },
+        {
+          "label": "Dual Received",
+          "sub": "",
+          "kind": "time",
+          "value": 38.8,
+          "display": "38.8"
+        },
+        {
+          "label": "PIC",
+          "sub": "",
+          "kind": "time",
+          "value": 1.2,
+          "display": "1.2"
+        }
+      ]
+    },
+    {
+      "key": "catclass",
+      "name": "Times by Category/Class",
+      "items": [
+        {
+          "label": "ASEL",
+          "sub": "85 Landings (21 Day, 9 Night)",
+          "kind": "time",
+          "value": 40.0,
+          "display": "40.0"
+        }
+      ]
+    },
+    {
+      "key": "capabilities",
+      "name": "Times by Aircraft Features",
+      "items": [
+        {
+          "label": "TAA (Technically Advanced Airplane)",
+          "sub": "",
+          "kind": "time",
+          "value": 23.1,
+          "display": "23.1"
+        },
+        {
+          "label": "TAA (Technically Advanced Airplane) - PIC",
+          "sub": "",
+          "kind": "time",
+          "value": 0.5,
+          "display": "0.5"
+        }
+      ]
+    },
+    {
+      "key": "properties",
+      "name": "Other Times and Counts",
+      "items": [
+        {
+          "label": "Takeoffs - Night",
+          "sub": "",
+          "kind": "int",
+          "value": 10.0,
+          "display": "10"
+        }
+      ]
+    }
+  ]
+}
