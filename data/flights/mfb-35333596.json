@@ -1,0 +1,37 @@
+{
+  "id": 35333596,
+  "date": "2026-11-07",
+  "tail": "N30126",
+  "model": "PA-28-181, Piper Archer II",
+  "route": "GTU -> GTU",
+  "stats": [
+    {
+      "key": "total",
+      "label": "Logged",
+      "kind": "time",
+      "value": 1.3,
+      "display": "1.3"
+    },
+    {
+      "key": "dual",
+      "label": "Dual received",
+      "kind": "time",
+      "value": 1.3,
+      "display": "1.3"
+    },
+    {
+      "key": "landings",
+      "label": "Landings",
+      "kind": "int",
+      "value": 1,
+      "display": "1"
+    }
+  ],
+  "telemetry": true,
+  "metar": {
+    "station": "KGTU",
+    "time": "2026-11-07T14:55Z",
+    "raw": "KGTU 071455Z 36008KT 10SM FEW027 SCT130 15/12 A3019 RMK AO2 SLP223 T01500117 53018"
+  },
+  "takeoff": "2026-11-07T15:07:14Z"
+}
