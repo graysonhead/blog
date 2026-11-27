@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <title> - Flight Log</title>
+    <link href="https://blog.graysonhead.net/tags/flight-log/atom.xml" rel="self" type="application/atom+xml"/>
+    <link href="https://blog.graysonhead.net"/>
+    <generator uri="https://www.getzola.org/">Zola</generator>
+    <updated>2026-11-07T00:00:00+00:00</updated>
+    <id>https://blog.graysonhead.net/tags/flight-log/atom.xml</id>
+    <entry xml:lang="en">
+        <title>Flight Log 2026-11-07: Just Look Out The Front Window</title>
+        <published>2026-11-07T00:00:00+00:00</published>
+        <updated>2026-11-07T00:00:00+00:00</updated>
+        <author>
+          <name>Unknown</name>
+        </author>
+        <link rel="alternate" href="https://blog.graysonhead.net/posts/flight-log-1/" type="text/html"/>
+        <id>https://blog.graysonhead.net/posts/flight-log-1/</id>
+        
+        <content type="html">&lt;img src=&quot;..&#x2F;..&#x2F;images&#x2F;flight_logs&#x2F;2026-11-07-n30126.jpg&quot; alt=&quot;N30126, a Piper Archer II, parked on the ramp with its door open under an overcast sky&quot; &#x2F;&gt;
+&lt;figure class=&quot;applet flightlog&quot; data-applet=&quot;flightlog&quot; data-src=&quot;https:&amp;#x2F;&amp;#x2F;blog.graysonhead.net&amp;#x2F;data&amp;#x2F;flights&amp;#x2F;mfb-35333596.gpx&quot; data-tz=&quot;America&amp;#x2F;Chicago&quot;&gt;
+  &lt;script type=&quot;text&#x2F;plain&quot; class=&quot;flightlog__marks-src&quot;&gt;09:13-09:15 | engine | Simulated Engine failure | start-alt
+09:20-09:23 | sturns | S-Turns | alt-dev gs-dev
+09:25-09:31 | turns1 | Turns Around A Point | alt-dev gs-dev
+09:36:40-09:40:34 | turns2 | Turns Around A Point | alt-dev gs-dev
+09:40:35-09:41:36 | engine2 | Simulated Engine Failure | start-alt&lt;&#x2F;script&gt;
+  &lt;div class=&quot;flightlog__head&quot;&gt;
+    &lt;span class=&quot;flightlog__title&quot;&gt;2026-11-07 · GTU -&amp;gt; GTU · N30126&lt;&#x2F;span&gt;
+  &lt;&#x2F;div&gt;
+  &lt;dl class=&quot;applet__stats flightlog__logbook&quot;&gt;
+    &lt;div&gt;&lt;dt&gt;Aircraft&lt;&#x2F;dt&gt;&lt;dd&gt;N30126 &lt;span class=&quot;flightlog__dim&quot;&gt;PA-28-181, Piper Archer II&lt;&#x2F;span&gt;&lt;&#x2F;dd&gt;&lt;&#x2F;div&gt;
+    &lt;div&gt;&lt;dt&gt;Logged&lt;&#x2F;dt&gt;&lt;dd&gt;1.3 h&lt;&#x2F;dd&gt;&lt;&#x2F;div&gt;
+    &lt;div&gt;&lt;dt&gt;Dual received&lt;&#x2F;dt&gt;&lt;dd&gt;1.3 h&lt;&#x2F;dd&gt;&lt;&#x2F;div&gt;
+    &lt;div&gt;&lt;dt&gt;Landings&lt;&#x2F;dt&gt;&lt;dd&gt;1&lt;&#x2F;dd&gt;&lt;&#x2F;div&gt;
+  &lt;&#x2F;dl&gt;
+  &lt;div class=&quot;flightlog__metar&quot;&gt;
+    &lt;span class=&quot;flightlog__metar-label&quot;&gt;Departure weather, KGTU&lt;&#x2F;span&gt;
+    &lt;code&gt;KGTU 071455Z 36008KT 10SM FEW027 SCT130 15&amp;#x2F;12 A3019 RMK AO2 SLP223 T01500117 53018&lt;&#x2F;code&gt;
+  &lt;&#x2F;div&gt;
+  &lt;dl class=&quot;applet__stats flightlog__stats&quot;&gt;&lt;&#x2F;dl&gt;
+  &lt;div class=&quot;flightlog__map&quot; role=&quot;img&quot; aria-label=&quot;Ground track map&quot;&gt;&lt;&#x2F;div&gt;
+  &lt;div class=&quot;flightlog__profile&quot;&gt;&lt;&#x2F;div&gt;
+  &lt;p class=&quot;applet__error flightlog__error&quot; hidden&gt;&lt;&#x2F;p&gt;
+  &lt;noscript&gt;&lt;p&gt;This flight&#x27;s map and profile need JavaScript.&lt;&#x2F;p&gt;&lt;&#x2F;noscript&gt;
+&lt;&#x2F;figure&gt;
+&lt;script type=&quot;module&quot; src=&quot;https:&#x2F;&#x2F;blog.graysonhead.net&#x2F;js&#x2F;apps&#x2F;flightlog&#x2F;flightlog.js&quot;&gt;&lt;&#x2F;script&gt;
+
+&lt;div class=&quot;notes&quot;&gt;
+&lt;p&gt;This is the first of what I hope will be a semi-regular series of flight logs. Not every flight, just the ones I find interesting or learn something from. The track above comes straight from my logbook; click any of the numbered annotations (or the highlighted links in the text) to jump to that part of the flight.&lt;&#x2F;p&gt;
+
+&lt;&#x2F;div&gt;
+&lt;p&gt;I&#x27;ve gotten to a point in my flying ability where altitude control is mostly automatic, but only as long as I&#x27;m not thinking about it.&lt;&#x2F;p&gt;
+&lt;p&gt;It&#x27;s an odd thing. It&#x27;s one of the most eminently measurable aspects of flying. Most of the maneuvers in the ACS&lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#1&quot;&gt;1&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt; have a tolerance for altitude deviation, and since altitude MSL is altitude MSL, it&#x27;s very easy to review after the fact and judge your performance. Because of this, I like to do a good job. And because I try to do a good job, I sometimes don&#x27;t. But if I just look out the front window, give my brain some visual data, and just let it do its thing... it usually seems to work out fine.&lt;&#x2F;p&gt;
+&lt;p&gt;I&#x27;ve noticed a similar thing in sim racing as well. I perform so much better when I focus my vision on the apex of a corner. But eventually, my eyes wander. Then the car&#x27;s balance shifts, or I catch another car (or they catch me) and I have to remind myself to look in the right place. Maybe this is what athletes mean when they say &amp;quot;keep your eye on the ball.&amp;quot; And given how often I hear it repeated, perhaps this is just a thing humans struggle with in general, as if the control of our eyes has only been partially delegated to the activity-specific neural network we&#x27;ve spent so much time building.&lt;&#x2F;p&gt;
+&lt;p&gt;Today was supposed to be my first solo out to the practice area, but the weather didn&#x27;t work out. I tell myself I&#x27;m in no hurry, but I definitely was disappointed. I felt ready. But because my life is hectic and I only barely have enough time to make progress towards my PPL as it is, we decided to make the best of the low ceilings and do something for currency reasons. And that something was ground reference maneuvers.&lt;&#x2F;p&gt;
+&lt;p&gt;But of course, we had to start with 
+&lt;a class=&quot;flightlog__marklink&quot; href=&quot;#engine&quot;&gt;an engine failure&lt;&#x2F;a&gt;. Because no training flight in a single-engine aircraft is complete without a simulated engine failure. I fortunately have a CFI who knows this and regularly catches me completely off guard with them. Today, I got every memory item, picked a great field, and made a good approach. But in doing so, I was flying right towards a radio tower. To be fair, I wasn&#x27;t going to hit it, but we got close enough that my CFI decided to prompt me to turn a bit early in the interest of not violating &lt;a href=&quot;https:&#x2F;&#x2F;www.ecfr.gov&#x2F;current&#x2F;title-14&#x2F;section-91.119&quot;&gt;§ 91.119&lt;&#x2F;a&gt;. The fact that I didn&#x27;t see it until my EFB started showing collision alerts was at least a little bit alarming. In hindsight, not seeing something right in front of me was very thematic.&lt;&#x2F;p&gt;
+&lt;p&gt;After a successful conclusion of that exercise, we started with some 
+&lt;a class=&quot;flightlog__marklink&quot; href=&quot;#sturns&quot;&gt;S-turns&lt;&#x2F;a&gt;. My first turn was where almost all of my ±91 ft of deviation occurred. The rest were far better. And, to be fair to myself, 91 ft of deviation is within ACS standards. But who wants to just barely meet the standards? My CFI pointed it out after the maneuver and it was very obvious watching the video back after the fact: I spent a lot of time fixating on the road, and the rest of the time peeking at the altimeter. At least my ground track was pretty dang even from turn to turn despite at least 12-15 knots of wind at that altitude.&lt;&#x2F;p&gt;
+&lt;p&gt;Then we moved on to the 
+&lt;a class=&quot;flightlog__marklink&quot; href=&quot;#turns1&quot;&gt;first turns around a point&lt;&#x2F;a&gt;. I wasn&#x27;t happy with my performance. My altitude control was better, but once again, I wasn&#x27;t looking in the right spot. I picked some reference points along the ground, but I bounced between those and the altimeter once again, and when some of those reference points weren&#x27;t working out I stubbornly refused to pick new ones. I also was thinking way too mechanically about my bank angle in relation to my direction of travel and the wind direction. But I&#x27;ve done a fair bit of these, I know how they work, and the last several I did were perfect. So I was a bit at a loss.&lt;&#x2F;p&gt;
+&lt;p&gt;To be clear, I don&#x27;t think I did &lt;em&gt;terribly&lt;&#x2F;em&gt;. I just knew that I was performing nowhere near my capabilities. And that is a weird thought to be having when you know you were feeling pretty ready to solo earlier that morning.&lt;&#x2F;p&gt;
+&lt;p&gt;So, I steeled myself to do better. And I decided that what I needed to do in order to do better was to frankly... just chill the heck out and relax. Basically, just not try so hard.&lt;&#x2F;p&gt;
+&lt;p&gt;We set up for 
+&lt;a class=&quot;flightlog__marklink&quot; href=&quot;#turns2&quot;&gt;the next set of turns around a new point&lt;&#x2F;a&gt;, and I spent a much larger percentage of my scan just looking out the front window. And it was beautiful. Pretty much a pair of perfect circles with only ±46 ft of deviation. I just thought less, and let my hands and feet do the work. In the video, the altimeter needle appeared to be practically glued to the face of the dial. Of course I didn&#x27;t get to enjoy it at the time, because I wasn&#x27;t looking at it often enough to notice.&lt;&#x2F;p&gt;
+&lt;p&gt;I was relieved, perhaps a bit elated, and proud. I got to enjoy these feelings for about 100 ms because my CFI 
+&lt;a class=&quot;flightlog__marklink&quot; href=&quot;#engine2&quot;&gt;failed the engine&lt;&#x2F;a&gt; before I even rolled wings level. Which was probably the best point in the whole lesson to do it. Being at about 1,000 ft AGL during a ground reference maneuver gives you about a minute to get on the ground at best glide. And fortunately I had picked out a field before we started the maneuver, so it didn&#x27;t take a whole lot of thought to figure out where to put the plane.&lt;&#x2F;p&gt;
+&lt;p&gt;And this brought me to a tangent that sent me down a bit of a rabbit hole. My CFI always dings me for picking a field against the furrows, and always gives me points for landing into the wind. But it seems like every time I pick a field, the wind runs across the furrows, often enough that I got suspicious it wasn&#x27;t happenstance.&lt;&#x2F;p&gt;
+&lt;p&gt;As it turns out, I might be right. Wind erosion is worst when furrows run along the prevailing wind&lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#2&quot;&gt;2&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt;, so fields tend to be plowed across it. That means the two rules of thumb are often at odds: landing with the furrows keeps you from flipping the airplane, but landing into the wind gives you less energy to get rid of. And it&#x27;s a lot less. At 2,550 lb and a 55-knot touchdown, a 13-knot headwind takes the energy from about 463 kJ down to 270 kJ, roughly 40% less. I&#x27;ll take a higher chance of flipping with 40% less energy over betting I can land neatly between the furrows, especially since some furrows are tall and some fields are rough enough that direction barely matters. My gut says the furrows only win when the wind is under about 5 knots (hopefully I never have to find out).&lt;&#x2F;p&gt;
+&lt;hr &#x2F;&gt;
+&lt;p&gt;I know full well that I&#x27;m a bit of a perfectionist. Probably to the degree that it doesn&#x27;t serve me, and tends to detract from the things I enjoy more than it improves them. During our debriefings, I always write down all the things I messed up and want to do better on. And if you looked at these lists over time from a purely quantitative standpoint, you&#x27;d think I was becoming a worse pilot. I definitely have more mistakes written down from recent flights than I did at the start. I don&#x27;t think I&#x27;m actually making more mistakes than I used to. I&#x27;ve just gotten good enough to notice the small ones.&lt;&#x2F;p&gt;
+&lt;p&gt;And the mistakes, individually, are becoming increasingly minor. Certainly not optional, but small enough that not many of them would be likely to be a hole in the Swiss cheese&lt;sup class=&quot;footnote-reference&quot;&gt;&lt;a href=&quot;#3&quot;&gt;3&lt;&#x2F;a&gt;&lt;&#x2F;sup&gt; by themselves. And I often wonder what to do with them. Usually it&#x27;s a little change to a checklist here, or focusing on a specific thing when I&#x27;m chair-flying or practicing on a simulator afterwards. But a lot of them are things that I just re-read before the next flight and trust my brain to not make again. And I rarely make the same one twice in a row.&lt;&#x2F;p&gt;
+&lt;p&gt;I&#x27;ve gotten to the point with many other skillsets where I stop thinking about what I&#x27;m doing, because I&#x27;ve programmed that behavior into my brain. I don&#x27;t necessarily need to supervise it consciously anymore. It&#x27;s a fun place to be, but any time those skillsets involve dangerous activities, it&#x27;s often hard to let go and trust yourself to &lt;em&gt;do the thing&lt;&#x2F;em&gt;. It&#x27;s also complicated by the fact that aviation has a mixture of tasks, and many of them &lt;em&gt;shouldn&#x27;t&lt;&#x2F;em&gt; be offloaded in this manner. Checklists, decisions, and visually avoiding hazards to name a few. Letting the stick-and-rudder neurons do their job with less conscious supervision will hopefully free up some capacity to supervise other things.&lt;&#x2F;p&gt;
+&lt;p&gt;I think my biggest takeaway for the next flight is that I should look out the front window a bit more, and worry about everything else a bit less.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;1&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;1&lt;&#x2F;sup&gt;
+&lt;p&gt;The FAA&#x27;s &lt;a href=&quot;https:&#x2F;&#x2F;www.faa.gov&#x2F;training_testing&#x2F;testing&#x2F;acs&quot;&gt;Airman Certification Standards&lt;&#x2F;a&gt;, which define the tolerances a pilot has to fly within on a checkride.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;2&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;2&lt;&#x2F;sup&gt;
+&lt;p&gt;W. S. Chepil, F. H. Siddoway and D. V. Armbrust, &lt;a href=&quot;https:&#x2F;&#x2F;infosys.ars.usda.gov&#x2F;WindErosion&#x2F;publications&#x2F;Andrew_pdf&#x2F;811.pdf&quot;&gt;&lt;em&gt;Prevailing Wind Erosion Direction in the Great Plains&lt;&#x2F;em&gt;&lt;&#x2F;a&gt;.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;footnote-definition&quot; id=&quot;3&quot;&gt;&lt;sup class=&quot;footnote-definition-label&quot;&gt;3&lt;&#x2F;sup&gt;
+&lt;p&gt;James Reason&#x27;s &lt;a href=&quot;https:&#x2F;&#x2F;en.wikipedia.org&#x2F;wiki&#x2F;Swiss_cheese_model&quot;&gt;Swiss cheese model&lt;&#x2F;a&gt; of how accidents happen: every layer of defense has holes, and an accident only gets through when the holes in enough layers line up.&lt;&#x2F;p&gt;
+&lt;&#x2F;div&gt;
+</content>
+        
+    </entry>
+</feed>
